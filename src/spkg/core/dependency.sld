@@ -7,6 +7,7 @@
       (scheme file)
       (srfi 130)
       (spkg core compat)
+  (spkg core util)
       (spkg core log)
       (spkg core lockfile))
   (include "dependency.scm")
@@ -20,7 +21,6 @@
     git-dependency-manifest-path
     runops
     runops-merge
-    filesystem-checksum
     git-dependency?
     git-dependency-name
     git-dependency-url

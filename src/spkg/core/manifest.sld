@@ -1,6 +1,7 @@
 (define-library (spkg core manifest)
   (import 
     (scheme base)
+    (srfi 1)
     (scheme file)
     (scheme write)
     (spkg core dependency)
@@ -16,11 +17,13 @@
     manifest-root-directory
     manifest-package
     manifest-dependencies
+  manifest-dev-dependencies
     manifest?
     read-manifest
 
     package?
     package-name
+  package-libraries
     package-rnrs
     package-version
     package-authors
@@ -41,16 +44,19 @@
       (%manifest 
         path 
         package
-        dependencies)
+        dependencies
+        dev-dependencies)
         
       manifest?
       (path manifest-path manifest-path-set!)
       (package manifest-package)
-      (dependencies manifest-dependencies))
+      (dependencies manifest-dependencies)
+      (dev-dependencies manifest-dev-dependencies))
 
     (define-record-type <package>
       (%package 
         name 
+        libraries
         rnrs ; RnRS version: r5rs, r6rs, r7rs
         version ; package version
         authors
@@ -62,20 +68,25 @@
         repository)
       package?
       (name package-name)
+      (libraries package-libraries)
       (rnrs package-rnrs)
       (version package-version))
     
-    (define (make-manifest package dependencies)
+    (define (make-manifest package dependencies dev-dependencies)
       (unless (package? package)
         (error "Invalid package in manifest" package))
 
       (unless (list? dependencies)
         (error "Dependencies must be a list" dependencies))
+
+      (unless (list? dev-dependencies)
+        (error "Dev dependencies must be a list" dev-dependencies))
       
       (%manifest 
         default-name
         package
-        dependencies))
+        dependencies
+        dev-dependencies))
 
     (define (read-manifest path)
       (define canonical (canonicalize-path-string path))
@@ -118,21 +129,34 @@
                   (error "dependency subpath must be a string or #f" (git-dependency-subpath dep)))
                     )))
           deps)
-        ;; check that `path/src/pkg.sld  or `pkg.sls` exists
-        (define libfile (string-append dir "/src/" (name->path (package-name pkg))))
-     
-        (cond
-          ((and (file-exists? (string-append libfile ".sls"))
-                (file-exists? (string-append libfile ".sld")))
-           (error "Both .sls and .sld files exist for package, only one allowed:" libfile))
-          ((file-exists? (string-append libfile ".sld"))
-            (unless (eq? 'r7rs (package-rnrs pkg))
-              (error ".sld files only supported for r7rs packages:" libfile)))
-          ((file-exists? (string-append libfile ".sls"))
-            (unless (eq? 'r6rs (package-rnrs pkg))
-              (error ".sls files only supported for r6rs packages:" libfile)))
-          (else 
-            (error "Library file not found for package" (package-name pkg))))))
+        ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
+        ;; If no explicit libraries are provided, we default to just the package name.
+        (define libs
+          (let ((val (package-libraries pkg)))
+            (cond
+              ((and (list? val) (not (null? val))) val)
+              (else (list (package-name pkg))))))
+
+        (define (verify-lib lib)
+          (unless (list? lib)
+            (error "library name must be a list of symbols" lib))
+          (unless (and (pair? lib) (every symbol? lib))
+            (error "library name must be a non-empty list of symbols" lib))
+          (define libfile (string-append dir "/src/" (name->path lib)))
+          (cond
+            ((and (file-exists? (string-append libfile ".sls"))
+                  (file-exists? (string-append libfile ".sld")))
+             (error "Both .sls and .sld files exist for library, only one allowed:" libfile))
+            ((file-exists? (string-append libfile ".sld"))
+             (unless (eq? 'r7rs (package-rnrs pkg))
+               (error ".sld files only supported for r7rs packages:" libfile)))
+            ((file-exists? (string-append libfile ".sls"))
+             (unless (eq? 'r6rs (package-rnrs pkg))
+               (error ".sls files only supported for r6rs packages:" libfile)))
+            (else
+             (error "Library file not found for package" lib))))
+
+        (for-each verify-lib libs)))
 
     (define (manifest-root-directory m)
       (define path (manifest-path m))
@@ -152,32 +176,61 @@
     (define-syntax manifest 
       (syntax-rules ()
         ((_ expr ...)
-          (manifest-aux (#f '()) expr ...))))
+          (manifest-aux (#f '() '()) expr ...))))
 
     (define-syntax manifest-aux
-      (syntax-rules (package dependencies)
-        ((_ (%package %dependencies))
+      (syntax-rules (package dependencies dev-dependencies)
+        ((_ (%package %dependencies %dev-dependencies))
           (make-manifest 
             %package
-            %dependencies))
-        ((_ (%package %dependencies) (dependencies dep ...) rest ...)
+            %dependencies
+            %dev-dependencies))
+        ((_ (%package %dependencies %dev-dependencies) (dependencies dep ...) rest ...)
           (manifest-aux 
-            (%package 
-             (dependencies-aux () dep ...))
+            (%package
+             (dependencies-aux () dep ...)
+             %dev-dependencies)
              rest ...
             ))
-        ((_ (%package %dependencies) (package expr ...) rest ...)
+        ((_ (%package %dependencies %dev-dependencies) (dev-dependencies dep ...) rest ...)
+          (manifest-aux
+            (%package
+             %dependencies
+             (dependencies-aux () dep ...))
+            rest ...))
+        ((_ (%package %dependencies %dev-dependencies) (package expr ...) rest ...)
           (manifest-aux 
             ((package expr ...)
-             %dependencies)
-            rest ...))
-        ))
+             %dependencies
+             %dev-dependencies)
+            rest ...))))
 
 
     (define (make-package 
-      name rnrs version authors description documentation license homepage readme repository)
-      (unless (or (list? name) (symbol? name))
-        (error "Package name must be a symbol or list of symbols" name))
+      name libraries rnrs version authors description documentation license homepage readme repository)
+      ;; Backwards compatibility: old manifests used a symbol name.
+      ;; New manifests should use a list: (foo) (foo bar) etc.
+      (when (symbol? name)
+        (set! name (list name)))
+      (unless (and (list? name) (pair? name) (every symbol? name))
+        (error "Package name must be a non-empty list of symbols" name))
+
+      (unless (or (not libraries)
+                  (and (list? libraries) (every list? libraries)))
+        (error "Libraries must be a list of library names" libraries))
+
+      ;; Normalize libraries: (#f or '()) means default to package name.
+      (define normalized-libraries
+        (cond
+          ((or (not libraries) (null? libraries)) '())
+          (else
+            (map
+              (lambda (lib)
+                (cond
+                  ((symbol? lib) (list lib))
+                  ((and (list? lib) (pair? lib) (every symbol? lib)) lib)
+                  (else (error "Each library must be a non-empty list of symbols" lib))))
+              libraries))))
       (unless (memq rnrs '(r5rs r6rs r7rs))
         (error "RnRS version must be one of 'r5rs, 'r6rs, 'r7rs" rnrs))
 
@@ -202,7 +255,8 @@
       
 
       (%package 
-        name 
+        name
+        normalized-libraries
         rnrs
         version
         authors
@@ -219,6 +273,7 @@
         ((_ expr ...)
           (package-aux (
             #f  ;; name 
+            #f  ;; libraries
             'r7rs  ;; RnRs
             #f  ;; version
             '() ;; authors 
@@ -232,12 +287,13 @@
 
     (define-syntax package-aux 
       (syntax-rules 
-        (name rnrs version authors description documentation license homepage readme repository)
+        (name libraries rnrs version authors description documentation license homepage readme repository)
         
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository))
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository))
         
           (make-package 
             %name 
+            %libraries
             %rnrs
             %version
             %authors
@@ -247,11 +303,12 @@
             %homepage
             %readme
             %repository))
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (name val) rest ...)
           
           (package-aux 
             ('val 
+              %libraries
               %rnrs
               %version
               %authors
@@ -262,11 +319,29 @@
               %readme
               %repository)
               rest ...))
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+          (libraries val ...) rest ...)
+          ;; Accept: (libraries (foo) (foo bar) ...)
+          ;; We quote the whole list so library names are treated as data.
+          (package-aux
+            (%name
+             '(val ...)
+             %rnrs
+             %version
+             %authors
+             %description
+             %documentation
+             %license
+             %homepage
+             %readme
+             %repository)
+            rest ...))
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (rnrs val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               'val
               %version
               %authors
@@ -278,11 +353,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (version val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               val
               %authors
@@ -294,11 +370,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (authors val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               val
@@ -310,11 +387,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (description val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -326,11 +404,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (documentation val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -342,11 +421,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (license val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -358,11 +438,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (homepage val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -374,11 +455,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (readme val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -390,11 +472,12 @@
               %repository)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository)
           (repository val) rest ...)
           
           (package-aux 
             (%name 
+              %libraries
               %rnrs
               %version
               %authors
@@ -406,8 +489,8 @@
               val)
               rest ...))
 
-        ((_ (%name %rnrs %version %authors %description %documentation %license %homepage %readme %repository))
-          (%package %name %rnrs %version))))
+        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository))
+          (%package %name %libraries %rnrs %version))))
           
   
     

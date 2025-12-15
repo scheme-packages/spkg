@@ -6,6 +6,7 @@
     (spkg core manifest)
     (spkg core manager)
     (spkg core log)
+  (spkg core errors)
     (spkg core compat)
     (spkg core dependency)
     (scheme base)
@@ -33,7 +34,7 @@
       (define mpath (manifest-path m))
       (define src-dir (string-append (dirname mpath) "/src"))
       (unless (file-exists? (string-append (dirname mpath) "/src/main.scm"))
-        (error "Package has no 'src/main.scm' file, cannot install binary."))
+        (raise-manifest-error "Package has no 'src/main.scm' file, cannot run."))
       (info "INFO" " Running '~a'" (string-append src-dir "/main.scm"))
       (let* ((main-script (string-append src-dir "/main.scm"))
              (cmd (string-append 

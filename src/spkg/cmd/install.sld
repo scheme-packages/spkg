@@ -6,6 +6,7 @@
     (spkg core manifest)
     (spkg core manager)
     (spkg core log)
+  (spkg core errors)
     (spkg core compat)
     (spkg core dependency)
     (scheme base)
@@ -43,14 +44,14 @@
       (define dir (option "directory"))
 
       (unless dir 
-        (error "Installation directory not specified or could not be determined."))
+        (raise-user-error "Installation directory not specified or could not be determined."))
       
       (define m (read-manifest "spkg.scm"))
       (define ops (manifest-install-dependencies m #t))
       (define mpath (manifest-path m))
    
       (unless (file-exists? (string-append (dirname mpath) "/src/main.scm"))
-        (error "Package has no 'src/main.scm' file, cannot install binary."))
+        (raise-manifest-error "Package has no 'src/main.scm' file, cannot install binary."))
      
       (define main (string-append mpath "/src/main.scm"))
       (system (string-append "mkdir -p " dir))
@@ -58,7 +59,8 @@
         (or (option "name")
             (package-name (manifest-package m))))
       (when (list? bin-name)
-        (error "Package is a nested name, please specify a single symbol for the binary name using '--name' option."))
+        ;; Package names are now lists like (foo bar). Default binary name uses root.
+        (set! bin-name (name->root bin-name)))
       (define bin-path (string-append (canonicalize-path-string dir) "/" (symbol->string bin-name)))
      
       (info "INFO" " Installing binary '~a' to '~a'..." bin-name bin-path)

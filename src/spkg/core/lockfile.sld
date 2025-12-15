@@ -10,9 +10,14 @@
           (scheme write)
           (scheme read)
           (scheme cxr)
-          (spkg core compat))
+          (spkg core compat)
+          (srfi 132)
+          (srfi 130))
   (export
+    lock-name->string
+    lockfile-sorted-entries
     default-lockfile-name
+    make-lockfile
     load-lockfile
     save-lockfile!
     lockfile?
@@ -30,5 +35,6 @@
     lock-entry-rev
     lock-entry-checksum
     lock-entry-subpath
-    lock-entry-source)
+    lock-entry-source
+    lock-entry-raw?)
   (include "lockfile.scm"))

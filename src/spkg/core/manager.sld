@@ -4,6 +4,8 @@
     (spkg core dependency)
     (spkg core log)
     (spkg core lockfile)
+    (spkg core errors)
+    (spkg core util)
     (spkg core compat)
     (scheme base)
     (scheme file)

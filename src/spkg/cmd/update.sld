@@ -15,7 +15,7 @@
     (define (run-update command)
       (define m (read-manifest "spkg.scm"))
       (manifest-update-dependencies m #t)
-      (info "INFO" " Dependencies updated in spkg.lock."))
+      (info "INFO" " Dependencies updated and lockfile completed (spkg.lock)."))
     
 
     (define spkg-update-command (command "update"

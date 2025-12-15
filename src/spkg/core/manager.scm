@@ -113,7 +113,28 @@
   tracker
   visited
   lock)
+  ;; A dependency is considered "direct" when installing the root manifest.
+  ;; For determinism, missing lock entries are allowed ONLY for direct deps.
+  ;; Transitive deps must already be recorded in the lockfile (typically via `spkg update`).
+  (define direct? (null? visited))
+
+  (define (ensure-locked! dep)
+    (when (and lock (not direct?))
+      (cond
+        ((git-dependency? dep)
+         (unless (lockfile-ref lock (git-dependency-name dep))
+           (raise-lockfile-error
+             "Missing lockfile entry for transitive dependency; run `spkg update`"
+             (git-dependency-name dep))))
+        ((path-dependency? dep)
+         (unless (lockfile-ref lock (path-dependency-name dep))
+           (raise-lockfile-error
+             "Missing lockfile entry for transitive dependency; run `spkg update`"
+             (path-dependency-name dep))))
+        (else #t))))
+
   (define (install-one dep manifest tracker visited)
+    (ensure-locked! dep)
     (cond 
       ((git-dependency? dep)
         (register-git-version! tracker dep)
@@ -123,10 +144,11 @@
             ((file-exists? manifest-path)
               (let* ((dep-manifest (read-manifest manifest-path))
                      (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
-                (let loop ((rest nested-deps) (ops ops))
-                  (if (null? rest)
-                    ops 
-                    (loop (cdr rest) (runops-merge ops (car rest)))))))
+                (runops-merge ops nested-deps)))
+                ;(let loop ((rest nested-deps) (ops ops))
+                ;  (if (null? rest)
+                ;    ops 
+                ;    (loop (cdr rest) (runops-merge ops (car rest)))))))
             (else 
               ;; no manifset: raw dependency
               ops))))
@@ -145,7 +167,10 @@
     (lambda (dep acc)
       (runops-merge acc (install-one dep manifest tracker visited)))
     (runops '() '() #f)
-    (manifest-dependencies manifest)))
+    (if dev-deps?
+        (append (manifest-dependencies manifest)
+                (manifest-dev-dependencies manifest))
+        (manifest-dependencies manifest))))
 
 (define (manifest-root-dir manifest)
   (manifest-root-directory manifest))
@@ -197,7 +222,10 @@
     (lambda (dep acc)
       (append acc (update-dependency-entry dep dev-deps? tracker visited lock)))
     '()
-    (manifest-dependencies manifest)))
+    (if dev-deps?
+        (append (manifest-dependencies manifest)
+                (manifest-dev-dependencies manifest))
+        (manifest-dependencies manifest))))
 
 (define (update-dependency-entry dep dev-deps? tracker visited lock)
   (cond
@@ -281,10 +309,19 @@
   (define lock (load-lockfile (manifest-lockfile-path manifest)))
   (define start (manifest-path manifest))
   (define tracker (make-version-tracker))
+
+  ;; First, update entries (advance untargeted git deps, refresh path checksums).
   (define updates (update-dependencies manifest dev-deps?
                                       tracker
                                       (if start (list start) '())
                                       lock))
+
+  ;; Then, ensure the lockfile is complete by installing the full transitive
+  ;; closure while allowing missing entries to be created.
+  ;; This keeps installs deterministic: afterwards, `manifest-install-dependencies`
+  ;; will not need to resolve any transitive deps.
+  (install-dependencies manifest dev-deps? (make-version-tracker) '() lock)
+
   (lockfile-set-root-checksum! lock manifest)
   (save-lockfile! lock)
   updates)

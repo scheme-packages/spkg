@@ -4,6 +4,7 @@
   (import 
     (spkg core compat)
     (spkg core log)
+    (spkg core errors)
     (scheme base)
     (scheme read)
     (scheme file)
@@ -15,10 +16,13 @@
 
 
   (begin 
-    (define (make-manifest name)
+    (define (make-manifest name is-lib?)
       (string-append 
         "(package\n"
-        "  (name " name ")\n"
+        "  (name (" name "))\n"
+        (if is-lib?
+            (string-append "  (libraries (" name "))\n")
+            "")
         "  (version \"0.1.0\")\n"
         "  (description \"A new Scheme package.\")\n"
         "  (rnrs r7rs))\n\n"
@@ -57,14 +61,14 @@
       (define rest (argument-results-rest results))
       (define flag (argument-results-flags results))
       (when (null? rest)
-        (error "Please specify a directory to create the new package in."))
+        (raise-user-error "Please specify a directory to create the new package in."))
       (define target-dir (string->sexpr (car rest)))
       (unless (symbol? target-dir)
-        (error "Directory name must be a symbol." target-dir))
+        (raise-user-error "Directory name must be a symbol." target-dir))
 
       (define target (symbol->string target-dir))
       (when (file-exists? target)
-        (error (string-append "Target directory '" target "' already exists.")))
+        (raise-user-error (string-append "Target directory '" target "' already exists.")))
       (create-directory target)
       (define manifest-path (string-append target "/spkg.scm"))
       (define main-path (string-append target "/src/main.scm"))
@@ -72,7 +76,7 @@
       (create-directory (string-append target "/src"))
       (call-with-output-file manifest-path
         (lambda (out)
-          (write-string (make-manifest (symbol->string target-dir)) out)))
+          (write-string (make-manifest (symbol->string target-dir) (flag "lib")) out)))
       (call-with-output-file lib-path 
         (lambda (out)
           (write-string (make-lib (symbol->string target-dir)) out)))

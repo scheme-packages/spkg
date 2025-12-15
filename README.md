@@ -6,11 +6,12 @@ Scheme Package Manager & Build system inspired by Cargo.
 
 - Automatic download of dependencies based on manifest description of them
 - Support for R7RS/R6RS Scheme systems 
-- Support for dev/build dependencies and dev/build scripts (TODO).
+- Support for dev dependencies in the manifest (`dev-dependencies`).
 - Works with "raw" dependencies: just specify path to source directory. `spkg` will calculate checksum and lock the deps appropriately.
 
+
 ## TODOs
-- Dev/Build dependencies
+- Build dependencies
 - build scripts and `spkg:rerun-on-change` directive
 - Tests and benchmarks out of the box (using [`brunch`](https://github.com/playx18/brunch-scm) and SRFI-64)
 - Snowball package format support

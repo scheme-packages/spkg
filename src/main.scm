@@ -8,13 +8,15 @@
         (args runner)
         (scheme process-context)
         (spkg core log)
+  (spkg core errors)
         (spkg core compat)
         (core io process)
         (spkg cmd update)
         (spkg cmd fetch)
         (spkg cmd install)
         (spkg cmd new)
-        (spkg cmd run))
+  (spkg cmd run)
+  (spkg cmd test))
 (define runner (make-command-runner "spkg" "Scheme Package Manager & Build System"))
 
 (define grammar (command-runner-grammar runner))
@@ -31,10 +33,14 @@
 (command-runner-add-command! runner spkg-install-command)
 (command-runner-add-command! runner spkg-new-command)
 (command-runner-add-command! runner spkg-run-command)
+(command-runner-add-command! runner spkg-test-command)
 
 (define (main args)
-  (unless (file-exists? "spkg.scm")
-    (errlog "ERROR" "No spkg.scm manifest found in the current directory."))
-  
-  (command-runner-run runner args))
+  (guard (c
+          (else
+            (print-condition-to-errlog c)
+            (exit 1)))
+    (unless (file-exists? "spkg.scm")
+      (raise-manifest-error "No spkg.scm manifest found in the current directory."))
+    (command-runner-run runner args)))
 (main (command-line))
