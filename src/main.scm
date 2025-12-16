@@ -16,7 +16,8 @@
         (spkg cmd install)
         (spkg cmd new)
   (spkg cmd run)
-  (spkg cmd test))
+        (spkg cmd test)
+        (spkg cmd publish))
 (define runner (make-command-runner "spkg" "Scheme Package Manager & Build System"))
 
 (define grammar (command-runner-grammar runner))
@@ -34,6 +35,7 @@
 (command-runner-add-command! runner spkg-new-command)
 (command-runner-add-command! runner spkg-run-command)
 (command-runner-add-command! runner spkg-test-command)
+(command-runner-add-command! runner spkg-publish-command)
 
 (define (main args)
   (guard (c

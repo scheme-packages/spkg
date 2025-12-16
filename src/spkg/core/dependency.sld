@@ -16,9 +16,13 @@
     git-dependency-install
     git-dependency-update!
     path-dependency-install
+    oci-dependency-install
+    oci-dependency-update!
     dependency-needs-recompile?
     git-dependency-install-dir
     git-dependency-manifest-path
+    oci-dependency-install-dir
+    oci-dependency-manifest-path
     runops
     runops-merge
     git-dependency?
@@ -26,6 +30,11 @@
     git-dependency-url
     git-dependency-target
     git-dependency-subpath
+    oci-dependency?
+    oci-dependency-name
+    oci-dependency-url
+    oci-dependency-target
+    oci-dependency-subpath
     path-dependency?
     path-dependency-name
     path-dependency-path
@@ -33,6 +42,7 @@
     path-dependency-raw?
     path-dependency-manifest-path
     %git-dependency
+    %oci-dependency
     %path-dependency
     runops?
     runops-append-path
@@ -61,6 +71,23 @@
       (url git-dependency-url)
       (target git-dependency-target)
       (subpath git-dependency-subpath))
+
+    ;; OCI dependency
+    ;; Installs from an OCI registry via `oras`.
+    ;; url is the registry/repo reference (e.g. "ghcr.io/org/pkg").
+    ;; target is the tag (e.g. "1.2.3"), optional.
+    ;; subpath selects a package within the extracted tree, optional.
+    (define-record-type <oci-dependency>
+      (%oci-dependency
+        name
+        url
+        target
+        subpath)
+      oci-dependency?
+      (name oci-dependency-name)
+      (url oci-dependency-url)
+      (target oci-dependency-target)
+      (subpath oci-dependency-subpath))
 
     ;; Path dependency
     ;; Installs from a local path on the filesystem.

@@ -23,7 +23,7 @@
 
     package?
     package-name
-  package-libraries
+    package-libraries
     package-rnrs
     package-version
     package-authors
@@ -126,8 +126,20 @@
                   (error "dependency target must be a string or #f" (git-dependency-target dep)))
                 (unless (or (not (git-dependency-subpath dep))
                             (string? (git-dependency-subpath dep)))
-                  (error "dependency subpath must be a string or #f" (git-dependency-subpath dep)))
-                    )))
+                  (error "dependency subpath must be a string or #f" (git-dependency-subpath dep))))
+
+              ((oci-dependency? dep)
+               (unless (or (list? (oci-dependency-name dep)) (symbol? (oci-dependency-name dep)))
+                 (error "dependency name must be a symbol or list" (oci-dependency-name dep)))
+               (unless (string? (oci-dependency-url dep))
+                 (error "dependency url must be a string" (oci-dependency-url dep)))
+               (unless (or (not (oci-dependency-target dep))
+                           (string? (oci-dependency-target dep)))
+                 (error "dependency target must be a string or #f" (oci-dependency-target dep)))
+               (unless (or (not (oci-dependency-subpath dep))
+                           (string? (oci-dependency-subpath dep)))
+                 (error "dependency subpath must be a string or #f" (oci-dependency-subpath dep))))
+              (else #t)))
           deps)
         ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
         ;; If no explicit libraries are provided, we default to just the package name.
@@ -208,8 +220,10 @@
 
     (define (make-package 
       name libraries rnrs version authors description documentation license homepage readme repository)
-      ;; Backwards compatibility: old manifests used a symbol name.
-      ;; New manifests should use a list: (foo) (foo bar) etc.
+
+      (unless version
+        (warn "Package " "No version specified in package manifest. You would not be able to publish this package without a version."))
+
       (when (symbol? name)
         (set! name (list name)))
       (unless (and (list? name) (pair? name) (every symbol? name))
@@ -253,7 +267,7 @@
       (unless (or (string? repository) (equal? repository ""))
         (error "Repository must be a string" repository)) 
       
-
+      
       (%package 
         name
         normalized-libraries
@@ -360,7 +374,7 @@
             (%name 
               %libraries
               %rnrs
-              val
+              'val
               %authors
               %description
               %documentation
@@ -487,15 +501,12 @@
               %homepage
               %readme
               val)
-              rest ...))
-
-        ((_ (%name %libraries %rnrs %version %authors %description %documentation %license %homepage %readme %repository))
-          (%package %name %libraries %rnrs %version))))
+              rest ...))))
           
   
     
     (define-syntax dependencies-aux
-      (syntax-rules (git path) 
+      (syntax-rules (git path oci)
         ((_ (parsed ...) )
           (list parsed ...))
         ((_ (parsed ...) (git expr ...) rest ...)
@@ -505,6 +516,58 @@
         ((_ (parsed ...) (path expr ...) rest ...)
           (dependencies-aux 
             (parsed ... (path-dependency expr ...) )
+            rest ...))
+        ((_ (parsed ...) (oci expr ...) rest ...)
+          (dependencies-aux
+            (parsed ... (oci-dependency expr ...))
+            rest ...))))
+
+    (define-syntax oci-dependency
+      (syntax-rules ()
+        ((_ expr ...)
+          (oci-dependency-aux
+            (
+              #f  ;; name
+              #f  ;; url (registry/repo)
+              #f  ;; rev (tag)
+              #f  ;; subpath
+            ) expr ...))))
+
+    (define-syntax oci-dependency-aux
+      (syntax-rules (name url rev subpath)
+        ((_ (%name %url %target %subpath))
+          (%oci-dependency
+            %name
+            %url
+            %target
+            %subpath))
+        ((_ (%name %url %target %subpath) (name val) rest ...)
+          (oci-dependency-aux
+            ('val
+             %url
+             %target
+             %subpath)
+            rest ...))
+        ((_ (%name %url %target %subpath) (url val) rest ...)
+          (oci-dependency-aux
+            (%name
+             val
+             %target
+             %subpath)
+            rest ...))
+        ((_ (%name %url %target %subpath) (rev val) rest ...)
+          (oci-dependency-aux
+            (%name
+             %url
+             val
+             %subpath)
+            rest ...))
+        ((_ (%name %url %target %subpath) (subpath val) rest ...)
+          (oci-dependency-aux
+            (%name
+             %url
+             %target
+             val)
             rest ...))))
 
     (define-syntax path-dependency 
@@ -582,5 +645,5 @@
              %url 
              %target
              val)
-            rest ...)))
-)))
+            rest ...))))
+))

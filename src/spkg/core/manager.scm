@@ -126,6 +126,11 @@
            (raise-lockfile-error
              "Missing lockfile entry for transitive dependency; run `spkg update`"
              (git-dependency-name dep))))
+        ((oci-dependency? dep)
+         (unless (lockfile-ref lock (oci-dependency-name dep))
+           (raise-lockfile-error
+             "Missing lockfile entry for transitive dependency; run `spkg update`"
+             (oci-dependency-name dep))))
         ((path-dependency? dep)
          (unless (lockfile-ref lock (path-dependency-name dep))
            (raise-lockfile-error
@@ -152,6 +157,15 @@
             (else 
               ;; no manifset: raw dependency
               ops))))
+      ((oci-dependency? dep)
+        (let* ((ops (oci-dependency-install dep lock))
+               (manifest-path (oci-dependency-manifest-path dep)))
+          (cond
+            ((file-exists? manifest-path)
+              (let* ((dep-manifest (read-manifest manifest-path))
+                     (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
+                (runops-merge ops nested-deps)))
+            (else ops))))
       ((path-dependency? dep)
         (let ((ops (path-dependency-install dep lock)))
           (if (path-dependency-raw? dep)
@@ -232,9 +246,42 @@
     ((git-dependency? dep)
       (register-git-version! tracker dep)
       (update-git-dependency dep dev-deps? tracker visited lock))
+    ((oci-dependency? dep)
+      (update-oci-dependency dep dev-deps? tracker visited lock))
     ((path-dependency? dep)
       (update-path-dependency dep dev-deps? tracker visited lock))
     (else '())))
+
+(define (update-oci-dependency dep dev-deps? tracker visited lock)
+  (define entry (lockfile-ref lock (oci-dependency-name dep)))
+  (define old-checksum (and entry (lock-entry-checksum entry)))
+  (define new-checksum old-checksum)
+  (define updated? #f)
+  ;; For OCI deps, we re-pull and re-lock (tag may advance).
+  (oci-dependency-update! dep lock)
+  (let ((current (lockfile-ref lock (oci-dependency-name dep))))
+    (set! new-checksum (and current (lock-entry-checksum current))))
+  (set! updated? (not (and old-checksum new-checksum (string=? old-checksum new-checksum))))
+  (cond
+    ((and updated? old-checksum new-checksum)
+      (info "Update" " ~a advanced (~a -> ~a)"
+        (oci-dependency-name dep)
+        old-checksum
+        new-checksum))
+    ((and updated? new-checksum)
+      (info "Update" " ~a locked to ~a"
+        (oci-dependency-name dep)
+        new-checksum))
+    ((and new-checksum)
+      (info "Update" " ~a already up to date (~a)"
+        (oci-dependency-name dep)
+        new-checksum))
+    (else
+      (info "Update" " ~a fetched" (oci-dependency-name dep))))
+
+  (let ((manifest-file (oci-dependency-manifest-path dep)))
+    (append (if updated? (list (oci-dependency-name dep)) '())
+            (update-nested-manifest manifest-file dev-deps? tracker lock visited))))
 
 (define (update-git-dependency dep dev-deps? tracker visited lock)
   (define entry (lockfile-ref lock (git-dependency-name dep)))

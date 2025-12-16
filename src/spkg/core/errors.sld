@@ -1,6 +1,7 @@
 (define-library (spkg core errors)
   (import (scheme base)
           (scheme write)
+          (scheme file)
           (spkg core log))
   (export
     ;; Base record
@@ -56,8 +57,10 @@
         (else "ERROR ")))
 
     (define (obj->string x)
-      (call-with-output-string
-        (lambda (p) (write x p))))
+      (let ((port (open-output-string)))
+        (write x port)
+        (get-output-string port)))
+
 
     (define (print-condition-to-errlog c)
       (cond

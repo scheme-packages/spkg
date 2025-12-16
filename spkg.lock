@@ -1,14 +1,14 @@
 (lockfile
   (version 2)
   (root-checksum
-    "02daa83d7491e679ce3ab570413c42521203fccffb86e64e9386c9a72508ca34")
-  (git (name (args))
+    "005d171fb347bd29b1b4481ca48721fb6e57a2487cf675d4d2409a83f226b1d7")
+  (oci (name (args))
        (raw? #f)
-       (url "https://github.com/playx18/scm-args")
-       (rev #f)
+       (url "ghcr.io/playx18/args")
+       (rev "0.1.1")
        (checksum
-         "2cc433b62d60679822480c6fa388a66ffe9651dd")
+         "6d7c4318d780a6c96dbede0ff746a7b1fa36eaf981c9fd9379027187251f807d")
        (subpath #f)
        (source
-         "args-2cc433b62d60679822480c6fa388a66ffe9651dd")))
+         "args-6d7c4318d780a6c96dbede0ff746a7b1fa36eaf981c9fd9379027187251f807d")))
 

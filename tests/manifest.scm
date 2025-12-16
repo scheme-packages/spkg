@@ -81,4 +81,20 @@
 (delete-file tmp)
 
 
+(define tmp "./tmp/.tmp-manifest-test4.scm")
+(mkdir-p "./tmp/src")
+(write-temp "./tmp/src/foo.sld" "(define-library (foo) (export) (import (scheme base)) (begin))\n")
+(write-temp tmp
+            (string-append
+              "(package\n"
+              "  (name (foo))\n"
+              "  (rnrs r7rs))\n\n"
+              "(dependencies\n"
+              "  (oci (name (bar)) (url \"ghcr.io/example/bar\") (rev \"1.0.0\")))\n"))
+(define m (read-manifest tmp))
+(test-assert "dependencies is list" (list? (manifest-dependencies m)))
+(test-equal "dependencies length" 1 (length (manifest-dependencies m)))
+(delete-file tmp)
+
+
 (test-end "manifest")
