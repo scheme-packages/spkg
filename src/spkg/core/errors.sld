@@ -73,7 +73,7 @@
                (errlog hdr "~a" msg))))
         (else
          ;; Best-effort fallback for arbitrary raised objects.
-         (errlog "ERROR" "Unhandled exception: ~a" c)
-         (errlog "ERROR" "Details: ~a" (obj->string c))))))
+         (errlog "ERROR " "Unhandled exception: ~a" c)
+         (errlog "ERROR " "Details: ~a" (obj->string c))))))
 
   )

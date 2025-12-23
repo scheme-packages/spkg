@@ -67,28 +67,28 @@
       (ensure-directory pull-dir)
       (ensure-directory unpack-dir)
 
-      (define ref (oci-ref dep entry))
-      ;; Pull artifacts into pull-dir
-      (system* (string-append "oras pull " (shell-quote ref) " -o " (shell-quote pull-dir)))
+      (let ((ref (oci-ref dep entry))
+            (_tmp ((system* (string-append "oras pull " (shell-quote ref) " -o " (shell-quote pull-dir)))))
+            (tarpath (oci-stage-ref->tarpath pull-dir)))
+        (unless (file-exists? tarpath)
+          (error "OCI pull did not produce expected archive" ref tarpath))
 
-      (define tarpath (oci-stage-ref->tarpath pull-dir))
-      (unless (file-exists? tarpath)
-        (error "OCI pull did not produce expected archive" ref tarpath))
+        ;; Extract
+        (system* (string-append "tar -xzf " (shell-quote tarpath) " -C " (shell-quote unpack-dir)))
 
-      ;; Extract
-      (system* (string-append "tar -xzf " (shell-quote tarpath) " -C " (shell-quote unpack-dir)))
 
-      ;; Compute checksum of extracted tree (ignore spkg.lock if present)
-      (define checksum (filesystem-checksum unpack-dir '("spkg.lock")))
-      (when (and expected-checksum (not (string=? expected-checksum checksum)))
-        (error "Lockfile checksum mismatch" expected-checksum checksum (oci-dependency-name dep)))
+        ;; Compute checksum of extracted tree (ignore spkg.lock if present)
+        (let ((checksum (filesystem-checksum unpack-dir '("spkg.lock"))))
+;        (define checksum (filesystem-checksum unpack-dir '("spkg.lock")))
+          (when (and expected-checksum (not (string=? expected-checksum checksum)))
+            (error "Lockfile checksum mismatch" expected-checksum checksum (oci-dependency-name dep)))
 
-      (let* ((relative (oci-relative-cache-name dep checksum))
-             (final-path (string-append oci-src-dir "/" relative)))
-        (delete-tree final-path)
-        (copy-directory unpack-dir final-path)
-        (info "Downloaded" " ~a (oci, ~a)" (oci-dependency-name dep) checksum)
-        (list relative checksum final-path)))))
+          (let* ((relative (oci-relative-cache-name dep checksum))
+                (final-path (string-append oci-src-dir "/" relative)))
+            (delete-tree final-path)
+            (copy-directory unpack-dir final-path)
+            (info "Downloaded" " ~a (oci, ~a)" (oci-dependency-name dep) checksum)
+            (list relative checksum final-path)))))))
 
 (define (oci-lock-entry-compatible? entry dep)
   (and (eq? 'oci (lock-entry-type entry))
@@ -171,7 +171,7 @@
 
 (define (oci-dependency-install dep . maybe-lock)
   (define lock (if (null? maybe-lock) #f (car maybe-lock)))
-  (ensure-cache-roots!)
+  (let ((_ (ensure-cache-roots!)))
   (define entry (and lock (lockfile-ref lock (oci-dependency-name dep))))
   (define needs-recompile? (oci-dependency-needs-recompile? dep entry))
   (define install-path
@@ -194,7 +194,7 @@
             (lock-entry-subpath current)
             (lock-entry-source current)
             raw?)))))
-  (oci-dependency->runops dep install-path needs-recompile?))
+  (oci-dependency->runops dep install-path needs-recompile?)))
 
 (define (oci-dependency-update! dep . maybe-lock)
   (define lock (if (null? maybe-lock) #f (car maybe-lock)))
@@ -444,7 +444,7 @@
 
 (define (git-dependency-install dep . maybe-lock)
   (define lock (if (null? maybe-lock) #f (car maybe-lock)))
-  (ensure-cache-roots!)
+  (let ((_ (ensure-cache-roots!)))
   (define entry (and lock (lockfile-ref lock (git-dependency-name dep))))
   (define needs-recompile? (git-dependency-needs-recompile? dep entry))
   (define install-path
@@ -467,7 +467,7 @@
             (lock-entry-source current)
             raw?)))))
   (remember-git-source! dep install-path)
-  (git-dependency->runops dep install-path needs-recompile?))
+  (git-dependency->runops dep install-path needs-recompile?)))
 
 (define (git-dependency-update! dep . maybe-lock)
   (define lock (if (null? maybe-lock) #f (car maybe-lock)))
@@ -479,13 +479,13 @@
 (define (path-dependency-install dep . maybe-lock)
   (define lock (if (null? maybe-lock) #f (car maybe-lock)))
   (define path (path-dependency-path dep))
-  (unless (file-exists? path)
+  (let ((_ (unless (file-exists? path)
     (error (string-append 
              "Path dependency '"
              (path-dependency-name dep)
              "' path '"
              path
-             "' does not exist.")))
+             "' does not exist.")))))
   (define entry (and lock (lockfile-ref lock (path-dependency-name dep))))
   (define checksum (filesystem-checksum path '()))
   (define needs-recompile?
@@ -512,5 +512,5 @@
                path
                "' is not an spkg package (missing spkg.scm).")))
     (else
-      (runops (list (string-append path "/src")) '() needs-recompile?))))
+      (runops (list (string-append path "/src")) '() needs-recompile?)))))
 

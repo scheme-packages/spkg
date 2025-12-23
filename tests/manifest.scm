@@ -2,6 +2,7 @@
         (scheme write)
         (scheme read)
         (scheme file)
+        (spkg core compat)
         (srfi 64)
         (spkg core manifest))
 

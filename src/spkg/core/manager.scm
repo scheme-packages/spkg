@@ -429,7 +429,7 @@
           ,@(if (not (null? append-paths)) `("--append-load-path" ,(string-join append-paths ",")) '())
           ,(if recompile? "--fresh-auto-compile" "")))
     ((guile)
-      ;; guile has no --append-load-path, concat paths and then use --load-path
+      ;; guile has no --append-load-path, concat paths and then use -L
         `(
           ,(case rnrs 
             ((r7rs) "--r7rs")
@@ -474,7 +474,7 @@
     ((chibischeme)
       `(,path "--" ,@rest))
     ((gauche)
-      `(,path "--" ,@rest))
+      `(,path ,@rest))
     ((mitscheme)
       `("--load" ,path "--eval" "'(exit 0)'" "--" ,@rest))
     (else 

@@ -101,8 +101,9 @@
       ((symbol? name) (list name))
       ;; Keep list names (including multi-segment) as-is.
       (else name)))
-
   (define name (canonical-name (lock-entry-name entry)))
+  (define entries (lockfile-entries lock))
+  (define existing (assoc name entries))
 
   ;; Ensure stored entry carries canonical name too (important for printing).
   (when (not (equal? (lock-entry-name entry) name))
@@ -115,9 +116,6 @@
                   (lock-entry-subpath entry)
                   (lock-entry-source entry)
                   (lock-entry-raw? entry))))
-
-  (define entries (lockfile-entries lock))
-  (define existing (assoc name entries))
 
   (let ((alt (and (list? name) (pair? name) (null? (cdr name)) (car name))))
     (when alt

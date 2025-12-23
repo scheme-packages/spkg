@@ -14,8 +14,9 @@ update-submodules:
 test-capy:
 	SCHEME=capy capy --fresh-auto-compile -L src,src/args/src -s src/main.scm -- test
 
-install-guile:
-	SCHEME=guile guile --r7rs -L src/args/src -L src -s src/main.scm -- install
+install-gauche:
+	SCHEME=gauche gosh -r7 -I src/args/src -I src src/main.scm install
 
-test-guile:
-	SCHEME=guile guile --r7rs -L src/args/src -L src -s src/main.scm -- test
+test-gauche:
+	SCHEME=gauche gosh -r7 -I src/args/src -I src src/main.scm test
+

@@ -3,6 +3,8 @@
   (cond-expand 
     (capy
       (import (spkg core capy-primitives)))
+    (gauche 
+      (import (spkg core gauche-primitives)))
     (guile 
       (import (spkg core guile-primitives))))
   (export  

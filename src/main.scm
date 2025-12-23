@@ -1,6 +1,7 @@
 (import (scheme base)
         (scheme file)
         (scheme read)
+        (scheme write)
         (spkg core manifest)
         (spkg core manager)
         (spkg core dependency)
@@ -37,10 +38,5 @@
 (command-runner-add-command! runner spkg-publish-command)
 
 (define (main args)
-  (guard (c
-          (else
-            (print-condition-to-errlog c)
-            (exit 1)))
-    
-    (command-runner-run runner args)))
-(main (command-line))
+  (command-runner-run runner args))
+(main (cdr (command-line)))

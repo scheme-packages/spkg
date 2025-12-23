@@ -55,8 +55,9 @@
         (lambda (pid stdout stdin stderr)
           (define status (process-wait pid))
           (define line (read-line stdout))
-          (close-output-port stdin)
-          (unless (zero? status)
+          
+;          (close-output-port stdin)
+          (unless (or (and (boolean? status) status) (zero? status))
             (system* cmd)
             (error "Command failed" cmd status))
           (if (or (eof-object? line) (string=? line ""))

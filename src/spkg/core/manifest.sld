@@ -70,7 +70,14 @@
       (name package-name)
       (libraries package-libraries)
       (rnrs package-rnrs)
-      (version package-version))
+      (version package-version)
+      (authors package-authors)
+      (description package-description)
+      (documentation package-documentation)
+      (license package-license)
+      (homepage package-homepage)
+      (readme package-readme)
+      (repository package-repository))
     
     (define (make-manifest package dependencies dev-dependencies)
       (unless (package? package)
@@ -100,7 +107,7 @@
                 (else (loop (read in) (cons expr exprs))))))
           
           (let* ((exprs (read-all))
-              (m (eval `(manifest ,@exprs))))
+              (m (eval `(manifest ,@exprs) (environment '(scheme base) '(spkg core manifest)))))
                  
             (manifest-path-set! m canonical)
             (manifest-verify m)
@@ -113,6 +120,7 @@
              (deps (manifest-dependencies m))
              (pkg (manifest-package m))
              (dir (manifest-root-directory m)))
+        (let ()
         (define (verify-dep dep)
           (cond
             ((git-dependency? dep)
@@ -138,23 +146,19 @@
                (unless (or (not (oci-dependency-subpath dep))
                            (string? (oci-dependency-subpath dep)))
                  (error "dependency subpath must be a string or #f" (oci-dependency-subpath dep))))
-      (else #t)))
-
-        (for-each verify-dep deps)
-        ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
-        ;; If no explicit libraries are provided, we default to just the package name.
+              (else #t)))
         (define libs
           (let ((val (package-libraries pkg)))
             (cond
               ((and (list? val) (not (null? val))) val)
               (else (list (package-name pkg))))))
-
         (define (verify-lib lib)
+          (define libfile (string-append dir "/src/" (name->path lib)))
           (unless (list? lib)
             (error "library name must be a list of symbols" lib))
           (unless (and (pair? lib) (every symbol? lib))
             (error "library name must be a non-empty list of symbols" lib))
-          (define libfile (string-append dir "/src/" (name->path lib)))
+          
           (cond
             ((and (file-exists? (string-append libfile ".sls"))
                   (file-exists? (string-append libfile ".sld")))
@@ -167,8 +171,10 @@
                (error ".sls files only supported for r6rs packages:" libfile)))
             (else
              (error "Library file not found for package" lib))))
-
-        (for-each verify-lib libs)))
+        (for-each verify-dep deps)
+        ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
+        ;; If no explicit libraries are provided, we default to just the package name.
+        (for-each verify-lib libs))))
 
     (define (manifest-root-directory m)
       (define path (manifest-path m))
@@ -220,19 +226,6 @@
 
     (define (make-package 
       name libraries rnrs version authors description documentation license homepage readme repository)
-
-      (unless version
-        (warn "Warning " "No version specified in package manifest. You would not be able to publish this package without a version."))
-
-      (when (symbol? name)
-        (set! name (list name)))
-      (unless (and (list? name) (pair? name) (every symbol? name))
-        (error "Package name must be a non-empty list of symbols" name))
-
-      (unless (or (not libraries)
-                  (and (list? libraries) (every list? libraries)))
-        (error "Libraries must be a list of library names" libraries))
-
       ;; Normalize libraries: (#f or '()) means default to package name.
       (define normalized-libraries
         (cond
@@ -245,6 +238,19 @@
                   ((and (list? lib) (pair? lib) (every symbol? lib)) lib)
                   (else (error "Each library must be a non-empty list of symbols" lib))))
               libraries))))
+      (unless version
+        (warn "Warning " "No version specified in package manifest. You would not be able to publish this package without a version."))
+
+      (when (symbol? name)
+        (set! name (list name)))
+      (unless (and (list? name) (pair? name) (every symbol? name))
+        (error "Package name must be a non-empty list of symbols" name))
+
+      (unless (or (not libraries)
+                  (and (list? libraries) (every list? libraries)))
+        (error "Libraries must be a list of library names" libraries))
+
+      
       (unless (memq rnrs '(r5rs r6rs r7rs))
         (error "RnRS version must be one of 'r5rs, 'r6rs, 'r7rs" rnrs))
 

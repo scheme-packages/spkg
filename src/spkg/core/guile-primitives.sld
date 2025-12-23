@@ -29,7 +29,7 @@
     call-with-process-io
     process-wait)
 
-
+  (syntax-violation #f "Guile is not yet supported; help on implementing guile-primitives.sld is welcome!")
   (define (directory-list dir)
     (define stream (opendir dir))
     (let loop ((entry (readdir stream)) (entries '()))
