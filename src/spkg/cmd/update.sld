@@ -13,11 +13,13 @@
 
   (begin 
     (define (run-update command)
-      (unless (file-exists? "spkg.scm")
-        (raise-manifest-error "No spkg.scm manifest found in the current directory."))
-      (define m (read-manifest "spkg.scm"))
-      (manifest-update-dependencies m #t)
-      (info "INFO" " Dependencies updated and lockfile completed (spkg.lock)."))
+      (let ((m
+             (begin
+               (unless (file-exists? "spkg.scm")
+                 (raise-manifest-error "No spkg.scm manifest found in the current directory."))
+               (read-manifest "spkg.scm"))))
+        (manifest-update-dependencies m #t)
+        (info "INFO" " Dependencies updated and lockfile completed (spkg.lock).")))
     
 
     (define spkg-update-command (command "update"

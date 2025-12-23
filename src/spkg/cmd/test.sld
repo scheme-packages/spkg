@@ -34,33 +34,30 @@
     ;; Recursively collect test files using `directory-list`.
     ;; Returns paths as strings (relative/absolute depending on input).
     (define (collect-test-files dir)
-      (define dir* (canonicalize-path-string dir))
-      (unless (file-exists? dir*)
-        (raise-user-error (string-append "Tests directory not found: " dir)))
-      (unless (file-directory? dir*)
-        (raise-user-error (string-append "Tests path is not a directory: " dir)))
+      (let* ((dir* (canonicalize-path-string dir))
+             (join (lambda (base name)
+                     (string-append base "/" name))))
+        (unless (file-exists? dir*)
+          (raise-user-error (string-append "Tests directory not found: " dir)))
+        (unless (file-directory? dir*)
+          (raise-user-error (string-append "Tests path is not a directory: " dir)))
 
-      (define (join base name)
-        (string-append base "/" name))
-
-      (define (walk d)
-        (fold
-          (lambda (entry acc)
-            (define p (join d entry))
-            (cond
-              ((file-directory? p)
-               ;; skip hidden dirs to avoid cache noise
-               (if (and (> (string-length entry) 0)
-                        (char=? (string-ref entry 0) #\.))
-                   acc
-                   (append (walk p) acc)))
-              ((and (file-exists? p) (scheme-file? p))
-               (cons p acc))
-              (else acc)))
-          '()
-          (directory-list d)))
-
-      (walk dir*))
+        (let walk ((d dir*))
+          (fold
+            (lambda (entry acc)
+              (let ((p (join d entry)))
+                (cond
+                  ((file-directory? p)
+                   ;; skip hidden dirs to avoid cache noise
+                   (if (and (> (string-length entry) 0)
+                            (char=? (string-ref entry 0) #\.))
+                       acc
+                       (append (walk p) acc)))
+                  ((and (file-exists? p) (scheme-file? p))
+                   (cons p acc))
+                  (else acc))))
+            '()
+            (directory-list d)))))
 
     (define (run-one-test ops project-src-dir file manifest)
       (define impl (implementation->binary-name (current-implementation)))
@@ -70,43 +67,41 @@
           " "
           (string-join (ops->runargs ops  project-src-dir #f manifest) " ")
           " "
-          (string-join (path->scriptarg file project-src-dir) " " '())))
+          (string-join (path->scriptarg file project-src-dir '()) " ")))
       (system cmd))
 
     (define (run-test command)
       (unless (file-exists? "spkg.scm")
         (raise-manifest-error "No spkg.scm manifest found in the current directory."))
-      (define results (command-results command))
-      (define top-results (command-global-results command))
-      (define top-flags (argument-results-flags top-results))
-      (when (top-flags "verbose")
-        (log-level log-level:debug))
+      (let* ((results (command-results command))
+             (top-results (command-global-results command))
+             (top-flags (argument-results-flags top-results))
+             (option (argument-results-options results))
+             (tests-dir (option "directory"))
+             (m (read-manifest "spkg.scm"))
+             ;; include dev deps for tests
+             (ops (manifest-install-dependencies m #t))
+             (mpath (manifest-path m))
+             (project-src-dir (string-append (dirname mpath) "/src"))
+             (files (collect-test-files tests-dir)))
 
-      (define option (argument-results-options results))
-      (define tests-dir (option "directory"))
+        (when (top-flags "verbose")
+          (log-level log-level:debug))
 
+        (when (null? files)
+          (info "Test" " No test files found under ~a" tests-dir)
+          (exit 0))
 
-      (define m (read-manifest "spkg.scm"))
-      ;; include dev deps for tests
-      (define ops (manifest-install-dependencies m #t))
-      (define mpath (manifest-path m))
-      (define project-src-dir (string-append (dirname mpath) "/src"))
+        (info "Test" " Running ~a test file(s)" (length files))
+        (for-each
+          (lambda (f)
+            (info "Test" " ~a" f)
+            (let ((status (run-one-test ops project-src-dir f m)))
+              (unless (zero? status)
+                (raise-user-error (string-append "Test failed: " f)))))
+          files)
 
-      (define files (collect-test-files tests-dir))
-      (when (null? files)
-        (info "Test" " No test files found under ~a" tests-dir)
-        (exit 0))
-
-      (info "Test" " Running ~a test file(s)" (length files))
-      (for-each
-        (lambda (f)
-          (info "Test" " ~a" f)
-          (define status (run-one-test ops project-src-dir f m))
-          (unless (zero? status)
-            (raise-user-error (string-append "Test failed: " f))))
-        files)
-
-      (info "Test" " All tests executed."))
+        (info "Test" " All tests executed.")))
 
     (define spkg-test-command
       (command "test"

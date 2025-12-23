@@ -40,56 +40,51 @@
       'value-help: "NAME")
     
     (define (run-install command)
-      (unless (file-exists? "spkg.scm")
-        (raise-manifest-error "No spkg.scm manifest found in the current directory."))
-      (define option (argument-results-options (command-results command)))
-      (define dir (option "directory"))
+      (let* ((option (argument-results-options (command-results command)))
+             (dir (or (option "directory")
+                      (raise-user-error "Installation directory not specified.")))
+             (m (or (and (file-exists? "spkg.scm") (read-manifest "spkg.scm"))
+                    (raise-manifest-error "No spkg.scm manifest found in the current directory.")))
+             (ops (manifest-install-dependencies m #t))
+             (mpath (manifest-path m))
+             (_main (or
+                      (and (file-exists? (string-append (dirname mpath) "/src/main.scm"))
+                           (string-append (dirname mpath) "/src/main.scm"))
+                      (raise-manifest-error "Package has no 'src/main.scm' file, cannot install binary.")))
+             (raw-bin-name (or (option "name")
+                               (package-name (manifest-package m))))
+             (bin-name (if (list? raw-bin-name)
+                           ;; Package names are now lists like (foo bar). Default binary name uses root.
+                           (name->root raw-bin-name)
+                           raw-bin-name))
+             (bin-path (string-append (canonicalize-path-string dir) "/" (symbol->string bin-name)))
+             ;; 1) Copy sources into `<cache-dir>/install/<name>/src`
+             (install-src-dir (string-append cache-dir "/install/" (symbol->string bin-name) "/src")))
 
-      (unless dir 
-        (raise-user-error "Installation directory not specified or could not be determined."))
-      
-      (define m (read-manifest "spkg.scm"))
+        (system (string-append "mkdir -p " dir))
 
-      (define ops (manifest-install-dependencies m #t))
-      (define mpath (manifest-path m))
-   
-      (unless (file-exists? (string-append (dirname mpath) "/src/main.scm"))
-        (raise-manifest-error "Package has no 'src/main.scm' file, cannot install binary."))
-     
-      (define main (string-append mpath "/src/main.scm"))
-      (system (string-append "mkdir -p " dir))
-      (define bin-name 
-        (or (option "name")
-            (package-name (manifest-package m))))
-      (when (list? bin-name)
-        ;; Package names are now lists like (foo bar). Default binary name uses root.
-        (set! bin-name (name->root bin-name)))
-      (define bin-path (string-append (canonicalize-path-string dir) "/" (symbol->string bin-name)))
-     
-      (info "INFO" " Installing binary '~a' to '~a'..." bin-name bin-path)
-      ;; 1) Copy sources into `<cache-dir>/install/<name>/src`
-      (define install-src-dir (string-append cache-dir "/install/" (symbol->string bin-name) "/src"))
-      (system (string-append "rm -rf " install-src-dir "/*"))
-      (system (string-append "mkdir -p " install-src-dir))
-      
-      (system (string-append "cp -r src " (string-append cache-dir "/install/" (symbol->string bin-name))))
-      ;; 2) Create launcher script
-      (call-with-output-file bin-path 
-        (lambda (out)
-          (write-string "#!/bin/sh" out)
-          (newline out)
-          (write-string
-            (string-append 
-              (implementation->binary-name (current-implementation)) 
-              " " 
-              (string-join (ops->runargs ops install-src-dir #t m) " ") 
-              " "
-              (string-join (path->scriptarg (string-append install-src-dir "/main.scm") install-src-dir '("$@")) " "))
-            out)
-          (newline out)
-          (flush-output-port out)))
-      (system (string-append "chmod +x " bin-path))
-      (info "INFO" " Binary '~a' installed successfully." bin-name))
+        (info "INFO" " Installing binary '~a' to '~a'..." bin-name bin-path)
+        (system (string-append "rm -rf " install-src-dir "/*"))
+        (system (string-append "mkdir -p " install-src-dir))
+
+        (system (string-append "cp -r src " (string-append cache-dir "/install/" (symbol->string bin-name))))
+        ;; 2) Create launcher script
+        (call-with-output-file bin-path
+          (lambda (out)
+            (write-string "#!/bin/sh" out)
+            (newline out)
+            (write-string
+              (string-append
+                (implementation->binary-name (current-implementation))
+                " "
+                (string-join (ops->runargs ops install-src-dir #t m) " ")
+                " "
+                (string-join (path->scriptarg (string-append install-src-dir "/main.scm") install-src-dir '("$@")) " "))
+              out)
+            (newline out)
+            (flush-output-port out)))
+        (system (string-append "chmod +x " bin-path))
+        (info "INFO" " Binary '~a' installed successfully." bin-name)))
       
   (define spkg-install-command (command "install"
       'description: "Install the package as a binary."

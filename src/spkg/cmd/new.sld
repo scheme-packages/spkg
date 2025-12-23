@@ -51,40 +51,40 @@
       'hide-negated-usage?: #t)
     
     (define (string->sexpr str)
-      (define port (open-input-string str))
-      (define sexpr (read port))
-      (close-input-port port)
-      sexpr)
+      (let* ((port (open-input-string str))
+             (sexpr (read port)))
+        (close-input-port port)
+        sexpr))
 
     (define (run-new command)
-      (define results (command-results command))
-      (define rest (argument-results-rest results))
-      (define flag (argument-results-flags results))
-      (when (null? rest)
-        (raise-user-error "Please specify a directory to create the new package in."))
-      (define target-dir (string->sexpr (car rest)))
-      (unless (symbol? target-dir)
-        (raise-user-error "Directory name must be a symbol." target-dir))
+      (let* ((results (command-results command))
+             (rest (argument-results-rest results))
+             (flag (argument-results-flags results)))
+        (when (null? rest)
+          (raise-user-error "Please specify a directory to create the new package in."))
+        (let* ((target-dir (string->sexpr (car rest))))
+          (unless (symbol? target-dir)
+            (raise-user-error "Directory name must be a symbol." target-dir))
 
-      (define target (symbol->string target-dir))
-      (when (file-exists? target)
-        (raise-user-error (string-append "Target directory '" target "' already exists.")))
-      (create-directory target)
-      (define manifest-path (string-append target "/spkg.scm"))
-      (define main-path (string-append target "/src/main.scm"))
-      (define lib-path (string-append target "/src/" (symbol->string target-dir) ".sld"))
-      (create-directory (string-append target "/src"))
-      (call-with-output-file manifest-path
-        (lambda (out)
-          (write-string (make-manifest (symbol->string target-dir) (flag "lib")) out)))
-      (call-with-output-file lib-path 
-        (lambda (out)
-          (write-string (make-lib (symbol->string target-dir)) out)))
-      
-      (unless (flag "lib")
-        (call-with-output-file main-path
-          (lambda (out)
-            (write-string (make-main) out)))))
+          (let* ((target (symbol->string target-dir))
+                 (manifest-path (string-append target "/spkg.scm"))
+                 (main-path (string-append target "/src/main.scm"))
+                 (lib-path (string-append target "/src/" (symbol->string target-dir) ".sld")))
+            (when (file-exists? target)
+              (raise-user-error (string-append "Target directory '" target "' already exists.")))
+            (create-directory target)
+            (create-directory (string-append target "/src"))
+            (call-with-output-file manifest-path
+              (lambda (out)
+                (write-string (make-manifest (symbol->string target-dir) (flag "lib")) out)))
+            (call-with-output-file lib-path
+              (lambda (out)
+                (write-string (make-lib (symbol->string target-dir)) out)))
+
+            (unless (flag "lib")
+              (call-with-output-file main-path
+                (lambda (out)
+                  (write-string (make-main) out))))))))
     (define spkg-new-command (command "new" 
       'description: "Create a new spkg package template in the specified directory."
       'grammar: grammar
