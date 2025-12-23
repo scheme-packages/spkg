@@ -13,7 +13,8 @@
     info
     errlog
     warn
-    verbose)
+    verbose
+    verboseln)
 
   (begin 
 
@@ -42,6 +43,11 @@
              fmt args))
 
     (define (verbose header fmt . args)
+      (apply log log-level:debug
+             (lambda (head) (cyan (bold head)))
+             header 
+             fmt args))
+    (define (verboseln header fmt . args)
       (apply logln log-level:debug
              (lambda (head) (cyan (bold head)))
              header 

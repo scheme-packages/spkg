@@ -17,7 +17,7 @@
     manifest-root-directory
     manifest-package
     manifest-dependencies
-  manifest-dev-dependencies
+    manifest-dev-dependencies
     manifest?
     read-manifest
 
@@ -81,7 +81,7 @@
 
       (unless (list? dev-dependencies)
         (error "Dev dependencies must be a list" dev-dependencies))
-      
+
       (%manifest 
         default-name
         package
@@ -113,10 +113,9 @@
              (deps (manifest-dependencies m))
              (pkg (manifest-package m))
              (dir (manifest-root-directory m)))
-        (for-each 
-          (lambda (dep)
-            (cond 
-              ((git-dependency? dep)
+        (define (verify-dep dep)
+          (cond
+            ((git-dependency? dep)
                 (unless (or (list? (git-dependency-name dep)) (symbol? (git-dependency-name dep)))
                   (error "dependency name must be a symbol" (git-dependency-name dep)))
                 (unless (string? (git-dependency-url dep))
@@ -139,8 +138,9 @@
                (unless (or (not (oci-dependency-subpath dep))
                            (string? (oci-dependency-subpath dep)))
                  (error "dependency subpath must be a string or #f" (oci-dependency-subpath dep))))
-              (else #t)))
-          deps)
+      (else #t)))
+
+        (for-each verify-dep deps)
         ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
         ;; If no explicit libraries are provided, we default to just the package name.
         (define libs
@@ -506,7 +506,7 @@
   
     
     (define-syntax dependencies-aux
-      (syntax-rules (git path oci)
+      (syntax-rules (git path oci system)
         ((_ (parsed ...) )
           (list parsed ...))
         ((_ (parsed ...) (git expr ...) rest ...)
@@ -516,6 +516,10 @@
         ((_ (parsed ...) (path expr ...) rest ...)
           (dependencies-aux 
             (parsed ... (path-dependency expr ...) )
+            rest ...))
+        ((_ (parsed ...) (system expr ...) rest ...)
+          (dependencies-aux 
+            (parsed ... (system-dependency expr ...) )
             rest ...))
         ((_ (parsed ...) (oci expr ...) rest ...)
           (dependencies-aux
@@ -646,4 +650,9 @@
              %target
              val)
             rest ...))))
+
+  (define-syntax system-dependency
+    (syntax-rules ()
+      ((_ name ...)
+        (system-dependencies '(name ...)))))
 ))

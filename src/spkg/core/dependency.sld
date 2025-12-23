@@ -51,7 +51,11 @@
     lock-entry->path
     name->path
     name->string
-    name->root)
+    name->root
+    system-dependencies?
+    system-dependencies-names
+    system-dependencies
+    )
   (begin 
 
     ;; Git dependency
@@ -59,7 +63,7 @@
     ;; Git repository must contain `spkg.scm` in root directory
     ;; for the package to be recognized. 
     ;;
-    ;; subpath is used to specify multiple packages in a single repository.
+    ;; subpath selects a package within the extracted Git tree, optional.
     (define-record-type <git-dependency>
       (%git-dependency
         name
@@ -76,6 +80,7 @@
     ;; Installs from an OCI registry via `oras`.
     ;; url is the registry/repo reference (e.g. "ghcr.io/org/pkg").
     ;; target is the tag (e.g. "1.2.3"), optional.
+    ;;
     ;; subpath selects a package within the extracted tree, optional.
     (define-record-type <oci-dependency>
       (%oci-dependency
@@ -103,7 +108,7 @@
       (path path-dependency-path path-dependency-path-set!)
       (raw? path-dependency-raw?))
     
-    ;; An installed dependency, regardless of type.
+    
     (define-record-type <runops>
       (runops 
         append-path
@@ -125,6 +130,15 @@
         (or (runops-recompile? r1)
             (runops-recompile? r2)))
       (runops append-path prepend-path recompile?))
+
+    ;; A list of system dependencies by name
+    ;; These are platform packages that must be installed outside of spkg
+    ;; and handled via selected Scheme implementation.
+    (define-record-type <system-dependencies>
+      (system-dependencies
+        names)
+      system-dependencies?
+      (names system-dependencies-names))
 
     ;; TODO: Snowball dependencies: needs parser for snowball
     ;; packages

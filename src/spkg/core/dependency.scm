@@ -22,15 +22,7 @@
     (for-each ensure-directory (list cache-dir git-dir git-src-dir oci-dir oci-src-dir))
     (set! cache-roots-initialized? #t)))
 
-(define (make-temp-dir)
-  (capture-required-line "mktemp -d /tmp/spkg.XXXXXX"))
 
-(define (with-temp-dir proc)
-  (let ((dir (make-temp-dir)))
-    (dynamic-wind
-      (lambda () #f)
-      (lambda () (proc dir))
-      (lambda () (delete-tree dir)))))
 
 
 (define (oci-ref dep . maybe-entry)

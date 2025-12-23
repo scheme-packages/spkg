@@ -9,9 +9,13 @@
     (args runner))
   (export spkg-fetch-command)
   (begin
+    (define grammar (make-grammar))
     (define (run-fetch command)
       (unless (file-exists? "spkg.scm")
         (raise-manifest-error "No spkg.scm manifest found in the current directory."))
+      (define results (command-results command))
+      (define option (argument-results-options results))
+      
       (define m (read-manifest "spkg.scm"))
       (define ops (manifest-install-dependencies m #t))
 
@@ -21,4 +25,5 @@
       (info "INFO" " All dependencies fetched and installed (lockfile-authoritative)."))
     (define spkg-fetch-command (command "fetch"
       'description: "Fetch and install all dependencies."
+      'grammar: grammar
       'run: run-fetch))))

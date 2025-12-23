@@ -30,7 +30,7 @@
     
     (define (make-main)
       (string-append 
-        "(import (scheme base))\n\n"
+        "(import (scheme base) (scheme r5rs))\n\n"
         "(define (main)\n"
         "  (display \"Hello, World!\\n\"))\n\n"
         "(main)\n"))

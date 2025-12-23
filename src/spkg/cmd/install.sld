@@ -49,6 +49,7 @@
         (raise-user-error "Installation directory not specified or could not be determined."))
       
       (define m (read-manifest "spkg.scm"))
+
       (define ops (manifest-install-dependencies m #t))
       (define mpath (manifest-path m))
    
@@ -81,7 +82,7 @@
             (string-append 
               (implementation->binary-name (current-implementation)) 
               " " 
-              (string-join (ops->runargs ops install-src-dir #t) " ") 
+              (string-join (ops->runargs ops install-src-dir #t m) " ") 
               " "
               (string-join (path->scriptarg (string-append install-src-dir "/main.scm") install-src-dir) " ")
               " -- $@")

@@ -6,9 +6,13 @@
     (spkg)))
 
 (dependencies
-;  (git 
-;    (name (args))
-;    (url "https://github.com/playx18/scm-args")))
+  (system 
+    (scheme base)
+    (scheme write)
+    (scheme file)
+    (scheme read)
+    (scheme process-context))
+
   (oci 
     (name (args))
     (url "ghcr.io/playx18/args")

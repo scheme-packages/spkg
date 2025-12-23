@@ -32,6 +32,7 @@
 
       (define rest (argument-results-rest results))
       (define m (read-manifest "spkg.scm"))
+
       (define ops (manifest-install-dependencies m #t))
       (define mpath (manifest-path m))
       (define src-dir (string-append (dirname mpath) "/src"))
@@ -42,11 +43,11 @@
              (cmd (string-append 
                 (implementation->binary-name (current-implementation))
                 " "
-                (string-join (ops->runargs ops src-dir #f) " ")
+                (string-join (ops->runargs ops src-dir #f m) " ")
                 " "
                 (string-join (path->scriptarg main-script src-dir) " ")
                 (if (null? rest) "" (string-append " -- " (string-join rest " "))))))
-        (verbose "DEBUG" " Executing command: '~a'" cmd)
+        (verboseln "DEBUG" " Executing command: '~a'" cmd)
         (system 
           cmd)))
 

@@ -10,7 +10,7 @@
     ((or (string=? lname "chibi")
          (string=? lname "chibi-scheme")
          (string=? lname "chibischeme"))
-     'chibi-scheme)
+     'chibischeme)
     ((or (string=? lname "gambit")
          (string=? lname "gambitscheme")
          (string=? lname "gambit-scheme"))
@@ -56,7 +56,7 @@
 (define (implementation->binary-name impl)
   (case impl 
     ((capyscheme) "capy")
-    ((chibi-scheme) "chibi-scheme")
+    ((chibischeme) "chibi-scheme")
     ((gambit) "gambit")
     ((guile) "guile")
     ((mit-scheme) "mit-scheme")
@@ -136,6 +136,15 @@
            (raise-lockfile-error
              "Missing lockfile entry for transitive dependency; run `spkg update`"
              (path-dependency-name dep))))
+        ((system-dependencies? dep)
+          (for-each 
+            (lambda (name)
+              (unless (system-has-library? name)
+                (raise-lockfile-error
+                  "Missing system dependency"
+                  name)))
+            (system-dependencies-names dep)))
+        
         (else #t))))
 
   (define (install-one dep manifest tracker visited)
@@ -147,8 +156,8 @@
                (manifest-path (git-dependency-manifest-path dep)))
           (cond 
             ((file-exists? manifest-path)
-              (let* ((dep-manifest (read-manifest manifest-path))
-                     (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
+    (let* ((dep-manifest (read-manifest manifest-path))
+      (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
                 (runops-merge ops nested-deps)))
                 ;(let loop ((rest nested-deps) (ops ops))
                 ;  (if (null? rest)
@@ -162,8 +171,8 @@
                (manifest-path (oci-dependency-manifest-path dep)))
           (cond
             ((file-exists? manifest-path)
-              (let* ((dep-manifest (read-manifest manifest-path))
-                     (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
+    (let* ((dep-manifest (read-manifest manifest-path))
+      (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
                 (runops-merge ops nested-deps)))
             (else ops))))
       ((path-dependency? dep)
@@ -172,19 +181,32 @@
               ops
               (let ((manifest-path (path-dependency-manifest-path dep)))
                 (if (file-exists? manifest-path)
-                    (let* ((dep-manifest (read-manifest manifest-path))
-                           (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
+          (let* ((dep-manifest (read-manifest manifest-path))
+            (nested-deps (install-dependencies dep-manifest dev-deps? tracker visited lock)))
                       (runops-merge ops nested-deps))
                     ops)))))
+      ((system-dependencies? dep)
+        (for-each 
+          (lambda (name)
+            (unless (system-has-library? name)
+              (raise-lockfile-error
+                "Missing system dependency"
+                name)))
+          (system-dependencies-names dep))
+        (runops '() '() #f))
       (else ops)))
+  
+  (define deps
+      (if dev-deps?
+          (append (manifest-dependencies manifest)
+                  (manifest-dev-dependencies manifest))
+          (manifest-dependencies manifest)))
+
   (fold 
     (lambda (dep acc)
       (runops-merge acc (install-one dep manifest tracker visited)))
     (runops '() '() #f)
-    (if dev-deps?
-        (append (manifest-dependencies manifest)
-                (manifest-dev-dependencies manifest))
-        (manifest-dependencies manifest))))
+    deps))
 
 (define (manifest-root-dir manifest)
   (manifest-root-directory manifest))
@@ -207,7 +229,7 @@
   (define new (runops (runops-append-path ops)
           (runops-prepend-path ops)
           #t))
-  (verbose "DEBUG " "forced recompile in runops=~a" (runops-recompile? new))
+  (verboseln "DEBUG " "forced recompile in runops=~a" (runops-recompile? new))
   new)
 
 (define (lockfile-set-root-checksum! lock manifest)
@@ -230,20 +252,25 @@
 
 (define (manifest-needs-recompile? manifest)
   (define lock (load-lockfile (manifest-lockfile-path manifest)))
+  (define deps (manifest-dependencies manifset))
   (or (manifest-root-checksum-mismatch? manifest lock)
       (ormap (lambda (dep)
                (dependency-needs-recompile? dep lock))
-             (manifest-dependencies manifest))))
+             deps)))
 
-(define (update-dependencies manifest dev-deps? tracker visited lock)
+(define (update-dependencies manifest dev-deps? tracker visited lock enabled-features disabled-features)
+  (define enabled (effective-feature-set manifest enabled-features disabled-features))
+  (define deps
+      (if dev-deps?
+          (append (manifest-dependencies manifest)
+                  (manifest-dev-dependencies manifest))
+          (manifest-dependencies manifest)))
+
   (fold
     (lambda (dep acc)
       (append acc (update-dependency-entry dep dev-deps? tracker visited lock)))
     '()
-    (if dev-deps?
-        (append (manifest-dependencies manifest)
-                (manifest-dev-dependencies manifest))
-        (manifest-dependencies manifest))))
+    deps))
 
 (define (update-dependency-entry dep dev-deps? tracker visited lock)
   (cond
@@ -371,7 +398,7 @@
   ;; closure while allowing missing entries to be created.
   ;; This keeps installs deterministic: afterwards, `manifest-install-dependencies`
   ;; will not need to resolve any transitive deps.
-  (install-dependencies manifest dev-deps? (make-version-tracker) '() lock)
+  (install-dependencies manifest dev-deps? (make-version-tracker) '() lock enabled-features disabled-features)
 
   (lockfile-set-root-checksum! lock manifest)
   (save-lockfile! lock)
@@ -379,23 +406,53 @@
 
 
 ;; Convert runops to command line arguments for specific Scheme implementation
-(define (ops->runargs ops src-dir for-install?)
+(define (ops->runargs ops src-dir for-install? manifest)
+  (define package (manifest-package manifest))
+  (define rnrs (package-rnrs package))
   (define impl (current-implementation))
+  (define recompile? (and (not for-install?) (runops-recompile? ops)))
+  (define append-paths (runops-append-path ops))
+  (define prepend-paths  
+    (if (zero? (string-length src-dir))
+        (runops-prepend-path ops)
+        (cons src-dir (runops-prepend-path ops))))
 
   (case impl 
     ((capyscheme)
       ;; install will force recompilation anyways
-      (let ((recompile? (and (not for-install?) (runops-recompile? ops)))
-            (append-paths (runops-append-path ops))
-            (prepend-paths  
-              (if (zero? (string-length src-dir))
-                  (runops-prepend-path ops)
-                  (cons src-dir (runops-prepend-path ops)))))
-        
         `(
+          ,(case rnrs 
+            ((r7rs) "--r7rs")
+            ((r6rs) "--r6rs")
+            (else ""))
           ,@(if (not (null? prepend-paths)) `("--load-path" ,(string-join prepend-paths ",")) '())
           ,@(if (not (null? append-paths)) `("--append-load-path" ,(string-join append-paths ",")) '())
-          ,(if recompile? "--fresh-auto-compile" ""))))
+          ,(if recompile? "--fresh-auto-compile" "")))
+    ((guile)
+      ;; guile has no --append-load-path, concat paths and then use --load-path
+        `(
+          ,(case rnrs 
+            ((r7rs) "--r7rs")
+            ((r6rs) "--r6rs")
+            (else ""))
+          ,@(map (lambda (p) (string-append "-L " p)) prepend-paths)
+          ,@(map (lambda (p) (string-append "-L " p)) append-paths)
+          ,(if recompile? "--fresh-auto-compile" "")))
+    ((chibischeme)
+      
+        (unless (eq? rnrs 'r7rs)
+          (error "Chibi-Scheme only supports R7RS mode"))
+        `(
+          ,@(map (lambda (p) (string-append "-I" p)) prepend-paths)
+          ,@(map (lambda (p) (string-append "-A" p)) append-paths)))
+    ((gauche)
+        `(
+          ,(case rnrs 
+            ((r7rs) "-r7")
+            (else (error "Gauche only supports R7RS mode")))
+          ,@(map (lambda (p) (string-append "-I" p)) prepend-paths)
+          ,@(map (lambda (p) (string-append "-A" p)) append-paths)
+          ))
     (else 
       (error "Not yet supported Scheme implementation" impl))))
 
@@ -406,30 +463,56 @@
   (case impl 
     ((capyscheme)
       `("--script" ,path))
+    ((guile)
+      `("-s" ,path))
+    ((chibischeme)
+      `(,path))
+    ((gauche)
+      `(,path))
     (else 
       (error "Not yet supported Scheme implementation" impl))))
 
 
 
+
 ;; Given a library name check if current-implementation has it installed.
 (define (system-has-library? lib)
-  (define libname (string-append "(quote (" (string-join (map symbol->string lib) " ") "))"))
-  (case (current-implementation)
-    ((capyscheme)
-      (let ((cmd 
-        (string-append 
-          (implementation->binary-name (current-implementation))
-          " -c "
-          "'(if (resolve-r6rs-interface " libname ") (exit 0) (exit 1))'")))
-    
-        (call-with-process-io 
-          cmd 
-          (lambda (pid stdout stdin stderr)
-            (define status (process-wait pid))
-            (close-output-port stdin)
-            (close-input-port stdout)
-            (zero? status)))
-          
-        
-        
-        ))))
+  (define libname (string-append "(" (string-join (map 
+    (lambda (name)
+      (cond 
+        ((number? name) (number->string name))
+        ((symbol? name) (symbol->string name))))
+    lib) " ") ")"))
+  
+  (verboseln "DEBUG " "Checking system for library ~a" lib)
+
+  (with-temp-dir 
+    (lambda (dir)
+      (define file (string-append dir "/test.scm"))
+      (call-with-output-file file
+        (lambda (out)
+          (write-string "(import (scheme base) (scheme write) (scheme process-context))\n" out)
+          (write-string
+            (string-append 
+              "(guard (c (else (display \"NOT FOUND\\n\") (exit 0))) (cond-expand\n"
+              "  ((library " libname ")\n"
+              "   (display \"FOUND\\n\"))\n"
+              "  (else\n"
+              "   (display \"NOT FOUND\\n\")))\n"
+              "(exit 0))\n")
+            out)
+          (flush-output-port out)
+          (let ((line (capture-required-line 
+                        (string-append 
+                          (implementation->binary-name (current-implementation))
+                          " "
+                          (string-join (path->scriptarg file #f) " ")))))
+            (verboseln "DEBUG " "Library check output: ~a" line)
+            (string=? line "FOUND")))))))
+
+;; Check if the current implementation can compile code. If not, checksum is always "invalid"
+;; when running with interpreted implementations so that when you change SCHEME it forces a recompile.
+(define (implementation-can-compile? impl)
+  (case impl
+    ((guile capyscheme) #t)
+    (else #f)))

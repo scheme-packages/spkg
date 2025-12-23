@@ -62,13 +62,13 @@
 
       (walk dir*))
 
-    (define (run-one-test ops project-src-dir file)
+    (define (run-one-test ops project-src-dir file manifest)
       (define impl (implementation->binary-name (current-implementation)))
       (define cmd
         (string-append
           impl
           " "
-          (string-join (ops->runargs ops  project-src-dir #f) " ")
+          (string-join (ops->runargs ops  project-src-dir #f manifest) " ")
           " "
           (string-join (path->scriptarg file project-src-dir) " ")))
       (system cmd))
@@ -85,6 +85,7 @@
       (define option (argument-results-options results))
       (define tests-dir (option "directory"))
 
+
       (define m (read-manifest "spkg.scm"))
       ;; include dev deps for tests
       (define ops (manifest-install-dependencies m #t))
@@ -100,7 +101,7 @@
       (for-each
         (lambda (f)
           (info "Test" " ~a" f)
-          (define status (run-one-test ops project-src-dir f))
+          (define status (run-one-test ops project-src-dir f m))
           (unless (zero? status)
             (raise-user-error (string-append "Test failed: " f))))
         files)

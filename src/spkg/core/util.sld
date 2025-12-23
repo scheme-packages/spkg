@@ -8,7 +8,9 @@
     copy-directory
     capture-required-line
     filesystem-checksum
-    verify-checksum)
+    verify-checksum
+    make-temp-dir
+    with-temp-dir)
   (import
     (scheme base)
     (scheme file)
@@ -74,6 +76,16 @@
         (string-append "python3 -c \"" filesystem-checksum-script "\" "
                        (shell-quote path)
                        exclude-args)))
+
+    (define (make-temp-dir)
+      (capture-required-line "mktemp -d /tmp/spkg.XXXXXX"))
+
+    (define (with-temp-dir proc)
+      (let ((dir (make-temp-dir)))
+        (dynamic-wind
+          (lambda () #f)
+          (lambda () (proc dir))
+          (lambda () (delete-tree dir)))))
 
   )
 )
