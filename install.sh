@@ -2,7 +2,7 @@
 
 set -eu
 
-REPO_URL_DEFAULT="https://github.com/playX18/spkg"
+REPO_URL_DEFAULT="https://github.com/scheme-packages/spkg"
 SPKG_HOME_DEFAULT="$HOME/.spkg"
 
 say() { printf '%s\n' "$*"; }
@@ -20,7 +20,7 @@ Usage: install.sh [options]
 
 Options:
   --repo URL              Git repo URL to clone (default: https://github.com/playX18/spkg)
-  --dir DIR               Destination dir (default: ./spkg)
+  --dir DIR               Destination dir (default: a temporary directory)
   --scheme capy|gauche    Skip prompts and force scheme
   --spkg-home DIR         Set SPKG_HOME (default: ~/.spkg)
   --non-interactive       Fail instead of prompting
@@ -37,10 +37,27 @@ USAGE
 }
 
 REPO_URL="$REPO_URL_DEFAULT"
-DEST_DIR="./spkg"
+DEST_DIR=""
 FORCE_SCHEME=""
 NON_INTERACTIVE=0
 DRY_RUN=0
+
+# If 1, keep the temp checkout directory (useful for debugging).
+SPKG_KEEP_TMP="${SPKG_KEEP_TMP:-0}"
+
+is_temp_dest=0
+cleanup_dest_dir() {
+  # Only remove temp dirs we created, and only when not in dry-run mode.
+  if [ "$DRY_RUN" -eq 1 ]; then
+    return 0
+  fi
+  if [ "$SPKG_KEEP_TMP" = "1" ]; then
+    return 0
+  fi
+  if [ "${is_temp_dest:-0}" -eq 1 ] && [ -n "${DEST_DIR:-}" ] && [ -d "${DEST_DIR:-}" ]; then
+    rm -rf "$DEST_DIR" || true
+  fi
+}
 
 # Allow user to pre-set SPKG_HOME via environment.
 SPKG_HOME="${SPKG_HOME:-$SPKG_HOME_DEFAULT}"
@@ -69,6 +86,29 @@ while [ "$#" -gt 0 ]; do
       die "unknown argument: $1" ;;
   esac
 done
+
+setup_dest_dir() {
+  # If user explicitly provided --dir, we use it (persistent checkout).
+  if [ -n "${DEST_DIR:-}" ]; then
+    is_temp_dest=0
+    return 0
+  fi
+
+  # Otherwise clone into a temporary directory.
+  if [ "$DRY_RUN" -eq 1 ]; then
+    # In dry-run, avoid creating a temp dir; use a placeholder.
+    DEST_DIR="/tmp/spkg.XXXXXX (dry-run)"
+    is_temp_dest=1
+    return 0
+  fi
+
+  # mktemp is widely available; it’s the most portable way to get a unique dir.
+  DEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/spkg.XXXXXX")
+  is_temp_dest=1
+
+  # Clean up temp checkout by default.
+  trap cleanup_dest_dir EXIT INT TERM
+}
 
 choose_spkg_home() {
   # If user already set it (env or flag), keep it.
@@ -181,8 +221,11 @@ prompt() {
   if [ "$NON_INTERACTIVE" -eq 1 ]; then
     return 1
   fi
+  if [ ! -r /dev/tty ]; then
+    return 1
+  fi
   printf '%s' "$1" >&2
-  IFS= read -r ans
+  IFS= read -r ans </dev/tty
   printf '%s' "$ans"
   return 0
 }
@@ -262,6 +305,7 @@ install_spkg() {
 
 main() {
   choose_spkg_home
+  setup_dest_dir
   scheme=$(choose_scheme)
   ensure_checkout
   install_spkg "$scheme"
