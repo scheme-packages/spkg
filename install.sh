@@ -22,6 +22,7 @@ Options:
   --repo URL              Git repo URL to clone (default: https://github.com/playX18/spkg)
   --dir DIR               Destination dir (default: ./spkg)
   --scheme capy|gauche    Skip prompts and force scheme
+  --spkg-home DIR         Set SPKG_HOME (default: ~/.spkg)
   --non-interactive       Fail instead of prompting
   --dry-run               Print what would run, but don't run it
   -h, --help              Show help
@@ -41,7 +42,8 @@ FORCE_SCHEME=""
 NON_INTERACTIVE=0
 DRY_RUN=0
 
-SPKG_HOME="$SPKG_HOME_DEFAULT"
+# Allow user to pre-set SPKG_HOME via environment.
+SPKG_HOME="${SPKG_HOME:-$SPKG_HOME_DEFAULT}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -54,6 +56,9 @@ while [ "$#" -gt 0 ]; do
     --scheme)
       [ "$#" -ge 2 ] || die "--scheme requires a value"
       FORCE_SCHEME="$2"; shift 2 ;;
+    --spkg-home)
+      [ "$#" -ge 2 ] || die "--spkg-home requires a value"
+      SPKG_HOME="$2"; shift 2 ;;
     --non-interactive)
       NON_INTERACTIVE=1; shift ;;
     --dry-run)
@@ -65,7 +70,25 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+choose_spkg_home() {
+  # If user already set it (env or flag), keep it.
+  if [ -n "${SPKG_HOME:-}" ]; then
+    # Prompt only if it's still the default and we are interactive.
+    if [ "$NON_INTERACTIVE" -eq 0 ] && [ "$SPKG_HOME" = "$SPKG_HOME_DEFAULT" ]; then
+      ans=$(prompt "SPKG_HOME directory (default: $SPKG_HOME_DEFAULT): ") || true
+      if [ -n "${ans:-}" ]; then
+        SPKG_HOME="$ans"
+      fi
+    fi
+    return 0
+  fi
+
+  SPKG_HOME="$SPKG_HOME_DEFAULT"
+}
+
 write_env_files() {
+  # $1: scheme (capy|gauche)
+  scheme="$1"
   spkg_home="$SPKG_HOME"
   env_sh="$spkg_home/env"
   env_fish="$spkg_home/env.fish"
@@ -88,6 +111,17 @@ case ":$PATH:" in
 esac
 export PATH
 EOF
+
+    # Add install-specific defaults (don't rely on heredoc interpolation).
+    {
+      printf '\n%s\n' '# Default scheme for this installation'
+      printf '%s\n' "SCHEME=$scheme" 'export SCHEME'
+    } >>"$env_sh"
+
+    # Replace hard-coded $HOME/.spkg with SPKG_HOME, but only within this file.
+    # This keeps the nice user-facing comments while honoring --spkg-home.
+    tmp="$env_sh.tmp"
+    sed "s|\$HOME/.spkg|$spkg_home|g" "$env_sh" >"$tmp" && mv "$tmp" "$env_sh"
   fi
 
   # fish shell
@@ -107,6 +141,14 @@ else
   end
 end
 EOF
+
+    {
+      printf '\n%s\n' '# Default scheme for this installation'
+      printf '%s\n' "set -gx SCHEME $scheme"
+    } >>"$env_fish"
+
+    tmp="$env_fish.tmp"
+    sed "s|~/.spkg|$spkg_home|g; s|\$HOME/.spkg|$spkg_home|g" "$env_fish" >"$tmp" && mv "$tmp" "$env_fish"
   fi
 }
 
@@ -117,11 +159,11 @@ spkg env files created:
   - $SPKG_HOME/env        (bash/zsh/posix sh)
   - $SPKG_HOME/env.fish   (fish)
 
-To enable `spkg` in new shells:
+To enable ``spkg`` in new shells:
   - bash/zsh:  add this line to ~/.profile or ~/.bashrc:
-      . "\$HOME/.spkg/env"
+    . "$SPKG_HOME/env"
   - fish:      add this line to ~/.config/fish/config.fish:
-      source ~/.spkg/env.fish
+    source "$SPKG_HOME/env.fish"
 EOF
 }
 
@@ -202,23 +244,24 @@ install_spkg() {
     capy)
       need_cmd capy || die "capy not found"
       say "Bootstrapping via CapyScheme"
-      run "cd '$DEST_DIR' && SCHEME=capy capy --fresh-auto-compile -L src,src/args/src -s src/main.scm -- install"
+      run "cd '$DEST_DIR' && SPKG_HOME='$SPKG_HOME' SCHEME=capy capy --fresh-auto-compile -L src,src/args/src -s src/main.scm -- install"
       ;;
     gauche)
       need_cmd gosh || die "gosh not found"
       say "Bootstrapping via Gauche"
-      run "cd '$DEST_DIR' && SCHEME=gauche gosh -r7 -I src/args/src -I src src/main.scm install"
+      run "cd '$DEST_DIR' && SPKG_HOME='$SPKG_HOME' SCHEME=gauche gosh -r7 -I src/args/src -I src src/main.scm install"
       ;;
     *)
       die "unknown scheme: $scheme" ;;
   esac
 
-  write_env_files
+  write_env_files "$scheme"
   say "Done." 
   post_install_message
 }
 
 main() {
+  choose_spkg_home
   scheme=$(choose_scheme)
   ensure_checkout
   install_spkg "$scheme"

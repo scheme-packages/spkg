@@ -42,16 +42,64 @@
     (else
      (error "Unknown Scheme implementation" name))))
 
+;; Find an executable on PATH.
+;; Returns an absolute/relative path string if found, otherwise #f.
+;; If `exe` already contains a '/', we treat it as a path and only validate it.
+(define (find-in-path exe)
+  (define (valid-exe? p)
+    (and (string? p)
+         (not (string=? p ""))
+         (file-exists? p)
+         ))
+
+  (define (path-entries)
+    (let ((p (get-environment-variable "PATH")))
+      (if (and p (not (string=? p "")))
+          (string-split p ":")
+          '())))
+
+  (cond
+    ;; Explicit path
+    ((string-contains exe "/")
+     (if (valid-exe? exe) exe #f))
+    ;; Search PATH
+    (else
+      (let loop ((rest (path-entries)))
+        (if (null? rest)
+            #f
+            (let* ((dir (car rest))
+                   (candidate (if (or (not dir) (string=? dir ""))
+                                  exe
+                                  (string-append dir "/" exe))))
+              (if (valid-exe? candidate)
+                  candidate
+                  (loop (cdr rest)))))))))
+
 
 
 (define (get-implementation-name)
   (define var (get-environment-variable "SCHEME"))
-  (if var 
-    (normalize-impl-name var)
-    (begin 
-      (let ((err (current-error-port)))
-        (display "Warning: SCHEME environment variable not set; defaulting to 'capyscheme'\n" err)
-        'capyscheme))))
+  (define (supported-scheme-values)
+    '(capyscheme chibischeme gambit guile mitscheme racket gauche scheme48 ypsilon chicken-scheme chezscheme))
+  (define (ensure-binary-exists! impl)
+    (define bin (implementation->binary-name impl))
+    (unless (find-in-path bin)
+      (error
+        (string-append
+          "Scheme implementation selected via SCHEME is not installed (binary not found in PATH).\n"
+          "  SCHEME=" (if var var "") " (normalized to '" (symbol->string impl) "')\n"
+          "  Expected executable: " bin "\n\n"
+          "Fix: install the implementation or switch SCHEME to one of:\n  "
+          (string-join (map symbol->string (supported-scheme-values)) ", ")))))
+
+  (if var
+      (let ((impl (normalize-impl-name var)))
+        (ensure-binary-exists! impl)
+        impl)
+      (begin
+        (let ((err (current-error-port)))
+          (display "Warning: SCHEME environment variable not set; defaulting to 'capyscheme'\n" err)
+          'capyscheme))))
 
 (define (implementation->binary-name impl)
   (case impl 
