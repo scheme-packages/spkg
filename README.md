@@ -89,13 +89,6 @@ included installer script. It auto-detects available Scheme runners and will ask
 curl -fsSL https://raw.githubusercontent.com/scheme-packages/spkg/refs/heads/master/install.sh | sh
 ```
 
-Common options:
-
-- Non-interactive (CI):
-
-	```sh
-	curl -fsSL https://raw.githubusercontent.com/playX18/spkg/master/install.sh | sh -s -- --non-interactive --scheme capy
-	```
 
 ### Shell environment (PATH)
 
