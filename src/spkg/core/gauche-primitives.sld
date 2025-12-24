@@ -47,14 +47,9 @@
   (define (file-stat-ctime path)
     (define st (sys-stat path))
     (~ stat'ctim))
-
-  
-
   (define (%call-with-process-io command proc)
     (receive (port process) (open-input-process-port command)
       (proc process port port port)))
 
   (define (pretty-print obj port)
-    (pprint obj :port port))
-)
-)
+    (pprint obj :port port))))

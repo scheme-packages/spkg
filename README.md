@@ -9,6 +9,16 @@ Scheme Package Manager & Build system inspired by Cargo.
 - Support for dev dependencies in the manifest (`dev-dependencies`).
 - Works with "raw" dependencies: just specify path to source directory. `spkg` will calculate checksum and lock the deps appropriately.
 
+# Supported Schemes
+
+| Scheme | Can run spkg? | Can run projects? |
+| --- | --- | --- |
+| CapyScheme | ✅ | ✅ |
+| Gauche | ✅ | ✅ |
+| Chibi | ❌ | ✅ |
+| Guile | ❌ | ✅ |
+
+
 
 ## TODOs
 - Build dependencies
@@ -34,9 +44,9 @@ Add an `oci` dependency to `spkg.scm`:
 ```scheme
 (dependencies
   (oci
-		(name (my org lib))
-		(url "ghcr.io/my-org/my-lib")
-		(rev "1.2.3")))
+	(name (my org lib))
+	(url "ghcr.io/my-org/my-lib")
+	(rev "1.2.3")))
 ```
 
 Then run:
@@ -62,13 +72,51 @@ Then run:
 - `python3`: Used to easily generate checksums for dependencies, later on will be replaced by Scheme native solution
 - `git`: Used to fetch Git dependencies
 - `oras`: Required only for OCI dependencies (`(oci ...)`) and `spkg publish`
-- [`capyscheme`](https://github.com/playx18/capyscheme): Right now the only Scheme implementation that can run spkg is CapyScheme. Work on supporting Gauche and Guile is ongoing. 
+- [`capyscheme`](https://github.com/playx18/capyscheme) or Gauche: Right now the only Scheme implementations that can run spkg is CapyScheme and Gauche. Work on supporting Guile and Chibi is ongoing. 
 
 ## Installation/bootstrap
 
 To bootstrap spkg you just have to run `make all`. It will update submodules and then install `spkg` using
 `spkg` itself. During bootstrap `spkg` depends on [args](https://github.com/playx18/scm-args) library being in
 `src/` directory, after bootstrap it automatically switches to using `args` managed by spkg itself. 
+
+### Install script (curl-able)
+
+If you already have either **CapyScheme** (`capy`) or **Gauche** (`gosh`) installed, you can bootstrap with the
+included installer script. It auto-detects available Scheme runners and will ask which one to use.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/scheme-packages/spkg/master/install.sh | sh
+```
+
+Common options:
+
+- Non-interactive (CI):
+
+	```sh
+	curl -fsSL https://raw.githubusercontent.com/playX18/spkg/master/install.sh | sh -s -- --non-interactive --scheme capy
+	```
+
+### Shell environment (PATH)
+
+The installer generates:
+
+- `~/.spkg/env` for POSIX shells (bash/zsh/sh)
+- `~/.spkg/env.fish` for fish
+
+To make `spkg` available in new shells:
+
+- bash/zsh: add to `~/.profile` or `~/.bashrc`:
+
+	```sh
+	. "$HOME/.spkg/env"
+	```
+
+- fish: add to `~/.config/fish/config.fish`:
+
+	```fish
+	source ~/.spkg/env.fish
+	```
 
 # Demo
 
