@@ -88,25 +88,20 @@ while [ "$#" -gt 0 ]; do
 done
 
 setup_dest_dir() {
-  # If user explicitly provided --dir, we use it (persistent checkout).
   if [ -n "${DEST_DIR:-}" ]; then
     is_temp_dest=0
     return 0
   fi
 
-  # Otherwise clone into a temporary directory.
   if [ "$DRY_RUN" -eq 1 ]; then
-    # In dry-run, avoid creating a temp dir; use a placeholder.
     DEST_DIR="/tmp/spkg.XXXXXX (dry-run)"
     is_temp_dest=1
     return 0
   fi
 
-  # mktemp is widely available; it’s the most portable way to get a unique dir.
   DEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/spkg.XXXXXX")
   is_temp_dest=1
 
-  # Clean up temp checkout by default.
   trap cleanup_dest_dir EXIT INT TERM
 }
 
@@ -267,8 +262,6 @@ choose_scheme() {
 ensure_checkout() {
   if [ -d "$DEST_DIR/.git" ]; then
     say "Using existing checkout: $DEST_DIR"
-  elif [ -e "$DEST_DIR" ]; then
-    die "destination exists but is not a git checkout: $DEST_DIR"
   else
     need_cmd git || die "git is required"
     say "Cloning $REPO_URL into $DEST_DIR"
@@ -282,7 +275,8 @@ ensure_checkout() {
 
 install_spkg() {
   scheme="$1"
-
+  mkdir -p "$SPKG_HOME/bin"
+  mkdir -p "$SPKG_HOME/lib"
   case "$scheme" in
     capy)
       need_cmd capy || die "capy not found"
