@@ -82,7 +82,7 @@
              ;; include dev deps for tests
              (ops (manifest-install-dependencies m #t))
              (mpath (manifest-path m))
-             (project-src-dir (string-append (dirname mpath) "/src"))
+             (project-src-dir (string-append (dirname mpath) "/" (manifest-source-path m)))
              (files (collect-test-files tests-dir)))
 
         (when (top-flags "verbose")

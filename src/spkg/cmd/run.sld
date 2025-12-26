@@ -31,12 +31,14 @@
              (m (read-manifest "spkg.scm"))
              (ops (manifest-install-dependencies m #t))
              (mpath (manifest-path m))
-             (src-dir (string-append (dirname mpath) "/src"))
+             (src-dir (string-append (dirname mpath) "/" (manifest-source-path m)))
              (main-script (string-append src-dir "/main.scm")))
         (when (top-flags "verbose")
           (log-level log-level:debug))
-        (unless (file-exists? (string-append (dirname mpath) "/src/main.scm"))
-          (raise-manifest-error "Package has no 'src/main.scm' file, cannot run."))
+        (unless (file-exists? main-script)
+          (raise-manifest-error
+            (string-append
+              "Package has no '" (manifest-source-path m) "/main.scm' file, cannot run.")))
         (info "INFO" " Running '~a'" main-script)
         (let ((cmd (string-append
                      (implementation->binary-name (current-implementation))

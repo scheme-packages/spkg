@@ -130,6 +130,36 @@
       (lockfile-set-entry! lock (build-oci-lock-entry dep checksum source-name rev)))
     path))
 
+;; Read `source-path` from a manifest file *without* importing (spkg core manifest)
+;; to avoid circular dependencies.
+;;
+;; Returns the configured string or the default "src".
+(define (read-manifest-source-path manifest-path)
+  (define canonical (canonicalize-path-string manifest-path))
+  (define (read-all in)
+    (let loop ((expr (read in))
+               (exprs '()))
+      (cond
+        ((eof-object? expr) (reverse exprs))
+        (else (loop (read in) (cons expr exprs))))))
+  (define (find-source-path exprs)
+    (let loop ((xs exprs))
+      (cond
+        ((null? xs) #f)
+        (else
+          (let ((expr (car xs)))
+            (if (and (list? expr)
+                     (pair? expr)
+                     (eq? (car expr) 'source-path)
+                     (pair? (cdr expr))
+                     (null? (cddr expr))
+                     (string? (cadr expr)))
+                (cadr expr)
+                (loop (cdr xs))))))))
+  (call-with-input-file canonical
+    (lambda (in)
+      (or (find-source-path (read-all in)) "src"))))
+
 (define (restore-oci-dependency dep entry lock)
   (let* ((stage (stage-oci-cache! dep (lock-entry-checksum entry) entry))
          (source-name (car stage))
@@ -151,14 +181,18 @@
                    install-path))
   (cond
     ((file-exists? (string-append path "/spkg.scm"))
-      (unless (file-exists? (string-append path "/src"))
-        (error (string-append
-                 "Dependency '"
-                 (name->string (oci-dependency-name dep))
-                 "' does not contain 'src' directory.")))
+      (let* ((src (read-manifest-source-path (string-append path "/spkg.scm")))
+             (src-path (string-append path "/" src)))
+        (unless (file-exists? src-path)
+          (error (string-append
+                   "Dependency '"
+                   (name->string (oci-dependency-name dep))
+                   "' does not contain source directory '"
+                   src
+                   "'.")))
       (when needs-recompile?
         (info "Build" " Recompiling ~a" (name->string (oci-dependency-name dep))))
-      (runops (list (string-append path "/src")) '() needs-recompile?))
+      (runops (list src-path) '() needs-recompile?)))
     (else
       (warn "Warning" ": not an spkg package, including raw source path: ~a" path)
       (runops (list path) '() needs-recompile?))))
@@ -423,15 +457,19 @@
                    install-path))
   (cond
     ((file-exists? (string-append path "/spkg.scm"))
-      (unless (file-exists? (string-append path "/src"))
-        (error (string-append
-                 "Dependency '"
-                 (name->string (git-dependency-name dep))
-                 "' does not contain 'src' directory.")))
+      (let* ((src (read-manifest-source-path (string-append path "/spkg.scm")))
+             (src-path (string-append path "/" src)))
+        (unless (file-exists? src-path)
+          (error (string-append
+                   "Dependency '"
+                   (name->string (git-dependency-name dep))
+                   "' does not contain source directory '"
+                   src
+                   "'.")))
       (when needs-recompile? 
         (info "Build" " Recompiling ~a" (name->string (git-dependency-name dep))))
 
-      (runops (list (string-append path "/src")) '() needs-recompile?))
+      (runops (list src-path) '() needs-recompile?)))
     (else
       (warn "Warning" ": not an spkg package, including raw source path: ~a" path)
       (runops (list path) '() needs-recompile?))))
@@ -512,5 +550,16 @@
                path
                "' is not an spkg package (missing spkg.scm).")))
     (else
-      (runops (list (string-append path "/src")) '() needs-recompile?)))))
+      (let* ((src (read-manifest-source-path (path-dependency-manifest-path dep)))
+             (src-path (string-append path "/" src)))
+        (unless (file-exists? src-path)
+          (error (string-append
+                   "Path dependency '"
+                   (name->string (path-dependency-name dep))
+                   "' does not contain source directory '"
+                   src
+                   "' at '"
+                   src-path
+                   "'.")))
+        (runops (list src-path) '() needs-recompile?))))))
 

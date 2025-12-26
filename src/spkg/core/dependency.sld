@@ -5,6 +5,7 @@
       (scheme process-context)
       (scheme write)
       (scheme file)
+      (scheme read)
       (srfi 130)
       (spkg core compat)
   (spkg core util)

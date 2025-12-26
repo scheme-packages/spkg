@@ -94,10 +94,13 @@
                     (raise-manifest-error "No spkg.scm manifest found in the current directory.")))
              (ops (manifest-install-dependencies m #t))
              (mpath (manifest-path m))
+       (project-src-dir (string-append (dirname mpath) "/" (manifest-source-path m)))
              (_main (or
-                      (and (file-exists? (string-append (dirname mpath) "/src/main.scm"))
-                           (string-append (dirname mpath) "/src/main.scm"))
-                      (raise-manifest-error "Package has no 'src/main.scm' file, cannot install binary.")))
+          (and (file-exists? (string-append project-src-dir "/main.scm"))
+            (string-append project-src-dir "/main.scm"))
+          (raise-manifest-error
+            (string-append
+           "Package has no '" (manifest-source-path m) "/main.scm' file, cannot install binary."))))
              (raw-bin-name (or (option "name")
                                (package-name (manifest-package m))))
              (bin-name (if (list? raw-bin-name)
@@ -105,11 +108,11 @@
                            (name->root raw-bin-name)
                            raw-bin-name))
              (bin-path (string-append (canonicalize-path-string dir) "/" (symbol->string bin-name)))
-       ;; 1) Copy sources into `$SPKG_HOME/lib/bin/<name>/src`
+       ;; 1) Copy sources into `$SPKG_HOME/lib/bin/<name>/<source-path>`
        (install-root (string-append (or (home->lib)
                        (raise-user-error "SPKG_HOME not set and HOME unavailable; cannot determine library directory."))
                      "/bin/" (symbol->string bin-name)))
-       (install-src-dir (string-append install-root "/src"))
+       (install-src-dir (string-append install-root "/" (manifest-source-path m)))
        ;; 2) Copy dependency sources into `$SPKG_HOME/lib/dependencies/...`
        (installed-ops (relocate-runops-to-home-lib! ops)))
 
@@ -119,7 +122,7 @@
         (system (string-append "rm -rf " install-src-dir "/*"))
         (system (string-append "mkdir -p " install-src-dir))
 
-        (system (string-append "cp -r src " install-root))
+  (system (string-append "cp -r " project-src-dir " " install-root))
         ;; 3) Create launcher script
         (call-with-output-file bin-path
           (lambda (out)

@@ -23,6 +23,7 @@
         (if is-lib?
             (string-append "  (libraries (" name "))\n")
             "")
+        "  (source-path \"src\")\n"
         "  (version \"0.1.0\")\n"
         "  (description \"A new Scheme package.\")\n"
         "  (rnrs r7rs))\n\n"

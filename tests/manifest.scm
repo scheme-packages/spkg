@@ -98,4 +98,20 @@
 (delete-file tmp)
 
 
+;; Custom source-path should be respected by manifest-verify and accessible via manifest-source-path.
+(define tmp "./tmp/.tmp-manifest-test-source-path.scm")
+(mkdir-p "./tmp/mysrc")
+(write-temp "./tmp/mysrc/foo.sld" "(define-library (foo) (export) (import (scheme base)) (begin))\n")
+(write-temp tmp
+            (string-append
+              "(source-path \"mysrc\")\n"
+              "(package\n"
+              "  (name (foo))\n"
+              "  (rnrs r7rs))\n\n"
+              "(dependencies)\n"))
+(define m (read-manifest tmp))
+(test-equal "manifest-source-path" "mysrc" (manifest-source-path m))
+(delete-file tmp)
+
+
 (test-end "manifest")

@@ -9,3 +9,5 @@
   (git
     (name (args))
     (url "https://github.com/playx18/scm-args")))
+
+(source-path "src/")

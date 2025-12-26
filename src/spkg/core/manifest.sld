@@ -14,6 +14,7 @@
 
     manifest-path
     manifest-root-directory
+    manifest-source-path
     manifest-package
     manifest-dependencies
     manifest-dev-dependencies
@@ -42,12 +43,14 @@
     (define-record-type <manifest>
       (%manifest 
         path 
+        source-path
         package
         dependencies
         dev-dependencies)
         
       manifest?
       (path manifest-path manifest-path-set!)
+      (source-path manifest-source-path)
       (package manifest-package)
       (dependencies manifest-dependencies)
       (dev-dependencies manifest-dev-dependencies))
@@ -78,7 +81,7 @@
       (readme package-readme)
       (repository package-repository))
     
-    (define (make-manifest package dependencies dev-dependencies)
+    (define (make-manifest package dependencies dev-dependencies source-path)
       (unless (package? package)
         (error "Invalid package in manifest" package))
 
@@ -88,8 +91,12 @@
       (unless (list? dev-dependencies)
         (error "Dev dependencies must be a list" dev-dependencies))
 
+      (unless (or (not source-path) (string? source-path))
+        (error "Manifest source-path must be a string" source-path))
+
       (%manifest 
         default-name
+        (or source-path "src")
         package
         dependencies
         dev-dependencies))
@@ -117,7 +124,8 @@
       (let* ((path (manifest-path m))
              (deps (manifest-dependencies m))
              (pkg (manifest-package m))
-             (dir (manifest-root-directory m)))
+             (dir (manifest-root-directory m))
+             (src (manifest-source-path m)))
         (let ()
         (define (verify-dep dep)
           (cond
@@ -151,7 +159,7 @@
               ((and (list? val) (not (null? val))) val)
               (else (list (package-name pkg))))))
         (define (verify-lib lib)
-          (define libfile (string-append dir "/src/" (name->path lib)))
+          (define libfile (string-append dir "/" src "/" (name->path lib)))
           (unless (list? lib)
             (error "library name must be a list of symbols" lib))
           (unless (and (pair? lib) (every symbol? lib))
@@ -170,7 +178,7 @@
             (else
              (error "Library file not found for package" lib))))
         (for-each verify-dep deps)
-        ;; check that `path/src/<lib>.sld` or `<lib>.sls` exists for each exported library.
+  ;; check that `path/<source-path>/<lib>.sld` or `<lib>.sls` exists for each exported library.
         ;; If no explicit libraries are provided, we default to just the package name.
         (for-each verify-lib libs))))
 
@@ -382,6 +390,7 @@
       (define pkg #f)
       (define deps '())
       (define dev-deps '())
+      (define source-path #f)
       (for-each
         (lambda (expr)
           (ensure-list expr "manifest")
@@ -390,9 +399,16 @@
             ((package) (set! pkg (parse-package-block expr)))
             ((dependencies) (set! deps (parse-dependencies-block expr 'dependencies)))
             ((dev-dependencies) (set! dev-deps (parse-dependencies-block expr 'dev-dependencies)))
+            ((source-path)
+             (call-with-values
+               (lambda () (parse-single expr "manifest"))
+               (lambda (_k v)
+                 (unless (string? v)
+                   (error "manifest" "(source-path ...) must be a string" expr))
+                 (set! source-path v))))
             (else (error "manifest" "unknown top-level form" (car expr) expr))))
         exprs)
-      (make-manifest pkg deps dev-deps))
+      (make-manifest pkg deps dev-deps source-path))
 
     ;; Exported constructors (procedural; callers must pass data).
     (define (package . clauses)
